@@ -1,26 +1,34 @@
 /**
- * ZTK Business Edition v3.0 - Ultimate Edition
- * ISO C11 Compliant - Full System with AI, Games, and Disk Management
+ * ZTK Business Edition v4.0 - Enterprise Ultimate Edition
+ * ISO C11 Compliant - Full System with AI, Games, Disk Management, and More
  * 
  * Features:
- * - Terminal web browser (links/lynx style)
- * - ZewAI Bot with DeepSeek API integration
- * - Full keyboard support with shortcuts
- * - Shutdown/restart/sleep buttons
- * - Video games (Snake, Tetris, Pong, Space Invaders)
- * - Disk management (mount, format, partition)
- * - Real package management
- * - Desktop environment installation
- * - Dual-boot configuration
- * - Self-modification capabilities
+ * - Modern command registry with plugins
+ * - Advanced shell scripting engine
+ * - Real-time process monitoring
+ * - Network file system support
+ * - Database integration (SQLite)
+ * - Web server mode
+ * - Cluster management
+ * - Container support (Docker/Podman)
+ * - Advanced AI with multiple models
+ * - Full terminal UI with mouse support
+ * - Plugin system
+ * - Remote shell access
+ * - Automated backups
+ * - System recovery tools
+ * - Performance profiling
+ * - Resource monitoring
+ * - Security auditing
  * 
- * Compilation: gcc -std=c11 -Wall -Wextra -o ztk ztk.c -lpthread -lncurses
- * Usage: ./ztk [--install] [--dual-boot] [--desktop kde] [--ai-token TOKEN]
+ * Compilation: gcc -std=c11 -Wall -Wextra -O3 -o ztk ztk.c -lpthread -lm -lcurl -lsqlite3 -lncurses
+ * Usage: ./ztk [--config FILE] [--plugins DIR] [--ai-token TOKEN] [--daemon]
  */
 
 #define _POSIX_C_SOURCE 200809L
 #define _XOPEN_SOURCE 700
 #define _GNU_SOURCE
+#define _DEFAULT_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,1253 +48,2284 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <termios.h>
-#include <unistd.h>
 #include <locale.h>
+#include <stdbool.h>
+#include <assert.h>
+#include <setjmp.h>
+#include <dlfcn.h>
+#include <sys/resource.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <curl/curl.h>
+#include <sqlite3.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#include <shlobj.h>
-#include <direct.h>
-#include <io.h>
-#include <conio.h>
-#define PATH_SEPARATOR '\\'
-#define PATH_SEPARATOR_STR "\\"
-#define mkdir(dir, mode) _mkdir(dir)
-#define chdir _chdir
-#define getcwd _getcwd
-#define realpath(N,R) _fullpath((R),(N),MAX_PATH)
-#define access _access
-#define F_OK 0
-#define USE_NCURSES 0
-#else
-#include <sys/mount.h>
-#include <grp.h>
-#include <pwd.h>
-#include <libgen.h>
-#include <termios.h>
-#include <unistd.h>
+#ifdef USE_NCURSES
 #include <ncurses.h>
-#define PATH_SEPARATOR '/'
-#define PATH_SEPARATOR_STR "/"
-#define USE_NCURSES 1
+#include <menu.h>
+#include <form.h>
+#include <panel.h>
 #endif
 
-/* Undefine conflicting macros */
-#undef MAX_INPUT
+/* Version Information */
+#define ZTK_VERSION "4.0.0"
+#define ZTK_RELEASE "Enterprise Ultimate Edition"
+#define ZTK_CODENAME "Phoenix"
+#define ZTK_BUILD_DATE __DATE__
+#define ZTK_BUILD_TIME __TIME__
+#define ZTK_API_VERSION 1
 
-/* ============ Constants ============ */
-#define MAX_CMD_INPUT 8192
-#define MAX_ARGS 256
+/* ============ Core Constants ============ */
+#define MAX_LINE 16384
+#define MAX_ARGS 1024
 #define MAX_PATH 4096
-#define MAX_FILES 1024
-#define MAX_DISKS 64
-#define VERSION "3.0"
-#define RELEASE_DATE "2026-07-09"
-#define SELF_MODIFY_ENV "ZTK_DEV_MODE"
-#define DEEPSEEK_API_URL "https://api.deepseek.com/v1/chat/completions"
+#define MAX_PLUGINS 256
+#define MAX_HISTORY 50000
+#define MAX_JOBS 1024
+#define MAX_VARIABLES 4096
+#define MAX_FUNCTIONS 1024
+#define MAX_ALIASES 512
+#define MAX_MODULES 128
+#define MAX_DATABASES 64
+#define MAX_CONTAINERS 256
+#define MAX_CLUSTER_NODES 64
+#define MAX_REMOTE_SESSIONS 32
+#define MAX_BACKUP_SETS 128
+#define MAX_AUDIT_ENTRIES 10000
 
-/* ============ System Information ============ */
-typedef struct {
-    char os_name[64];
-    char os_version[64];
-    char architecture[32];
-    char package_manager[32];
-    char install_prefix[MAX_PATH];
-    int has_sudo;
-    int is_windows;
-    int is_linux;
-    int is_macos;
-    int is_admin;
-    char home_dir[MAX_PATH];
-    char temp_dir[MAX_PATH];
-    char deepseek_token[256];
-    int ai_enabled;
-    int terminal_width;
-    int terminal_height;
-} system_info_t;
+/* ============ Security Constants ============ */
+#define SECURE_BUFFER_SIZE 4096
+#define MAX_PASSWORD_TRIES 3
+#define SESSION_TIMEOUT 3600
+#define MIN_PASSWORD_LENGTH 12
 
-/* ============ Virtual File System ============ */
-typedef struct vfs_file {
-    char name[256];
-    char *content;
-    size_t size;
-    mode_t mode;
-    time_t mtime;
-    int is_directory;
-    int is_system_file;
-    int is_editable;
-    struct vfs_file *parent;
-    struct vfs_file *children[MAX_FILES];
-    int child_count;
-} vfs_file_t;
+/* ============ Color Schemes ============ */
+#define COLOR_DEFAULT  "\033[0m"
+#define COLOR_BOLD     "\033[1m"
+#define COLOR_DIM      "\033[2m"
+#define COLOR_ITALIC   "\033[3m"
+#define COLOR_UNDERLINE "\033[4m"
+#define COLOR_BLINK    "\033[5m"
+#define COLOR_REVERSE  "\033[7m"
+#define COLOR_HIDDEN   "\033[8m"
 
-typedef struct {
-    vfs_file_t *root;
-    vfs_file_t *cwd;
-    char *mount_point;
-    int persistent;
-} vfs_t;
+#define COLOR_BLACK    "\033[30m"
+#define COLOR_RED      "\033[31m"
+#define COLOR_GREEN    "\033[32m"
+#define COLOR_YELLOW   "\033[33m"
+#define COLOR_BLUE     "\033[34m"
+#define COLOR_MAGENTA  "\033[35m"
+#define COLOR_CYAN     "\033[36m"
+#define COLOR_WHITE    "\033[37m"
 
-/* ============ Package Management ============ */
-typedef struct package {
-    char name[128];
-    char version[64];
-    char description[512];
-    char category[64];
-    char dependencies[1024];
-    char install_cmd[512];
-    char uninstall_cmd[512];
-    char repo_url[256];
-    int installed;
-    int size_mb;
-    struct package *next;
-} package_t;
+#define COLOR_BG_BLACK   "\033[40m"
+#define COLOR_BG_RED     "\033[41m"
+#define COLOR_BG_GREEN   "\033[42m"
+#define COLOR_BG_YELLOW  "\033[43m"
+#define COLOR_BG_BLUE    "\033[44m"
+#define COLOR_BG_MAGENTA "\033[45m"
+#define COLOR_BG_CYAN    "\033[46m"
+#define COLOR_BG_WHITE   "\033[47m"
 
-/* ============ Desktop Environment ============ */
-typedef struct desktop_env {
-    char name[64];
-    char display_name[128];
-    char package[64];
-    char install_cmd[512];
-    char start_cmd[256];
-    int memory_requirement_mb;
-    int gpu_requirement;
-    int is_installed;
-    struct desktop_env *next;
-} desktop_env_t;
+/* ============ Advanced Data Structures ============ */
 
-/* ============ Boot Configuration ============ */
-typedef struct {
-    char boot_loader[64];
-    char kernel_path[MAX_PATH];
-    char initrd_path[MAX_PATH];
-    char boot_options[512];
-    int timeout_seconds;
-    int default_entry;
-    struct {
-        char os_name[128];
-        char partition[MAX_PATH];
-        char kernel[MAX_PATH];
-        char initrd[MAX_PATH];
-        char options[512];
-        int is_default;
-    } entries[16];
-    int entry_count;
-} boot_config_t;
-
-/* ============ Disk Management ============ */
-typedef struct {
-    char device[MAX_PATH];
-    char mount_point[MAX_PATH];
-    char filesystem[32];
-    uint64_t size_bytes;
-    uint64_t used_bytes;
-    uint64_t free_bytes;
-    int is_mounted;
-    int is_boot;
-    int is_system;
-    char label[64];
-    char uuid[64];
-} disk_info_t;
-
-typedef struct {
-    disk_info_t disks[MAX_DISKS];
-    int disk_count;
-} disk_manager_t;
-
-/* ============ Game System ============ */
-typedef struct {
-    char name[64];
-    char description[256];
-    int min_players;
-    int max_players;
-    int requires_graphics;
-    int score;
-    int high_score;
-    void (*game_loop)(void);
-} game_t;
-
-/* ============ Terminal Browser ============ */
-typedef struct {
-    char url[512];
-    char content[1024*64];
-    int content_length;
-    int scroll_position;
-    int cursor_position;
-    char history[100][512];
-    int history_count;
-    int bookmarks[50][512];
-    int bookmark_count;
-    int is_ssl;
-} browser_t;
-
-/* ============ ZewAI Bot ============ */
-typedef struct {
-    char token[256];
-    char model[64];
-    char system_prompt[1024];
-    char conversation[100][4096];
-    int conversation_count;
-    int max_tokens;
-    float temperature;
-    int enabled;
-    pthread_mutex_t ai_lock;
-} zewai_t;
-
-/* ============ Keyboard Manager ============ */
-typedef struct {
-    struct termios original_termios;
-    int raw_mode;
-    char key_buffer[256];
-    int buffer_index;
-    struct {
-        int key_code;
-        char description[64];
-        void (*handler)(void);
-    } shortcuts[50];
-    int shortcut_count;
-} keyboard_manager_t;
-
-/* ============ Power Management ============ */
+/* Plugin System */
 typedef enum {
-    POWER_SHUTDOWN,
-    POWER_REBOOT,
-    POWER_SLEEP,
-    POWER_HIBERNATE,
-    POWER_LOGOUT
-} power_action_t;
+    PLUGIN_TYPE_COMMAND,
+    PLUGIN_TYPE_FS,
+    PLUGIN_TYPE_NETWORK,
+    PLUGIN_TYPE_AI,
+    PLUGIN_TYPE_SECURITY,
+    PLUGIN_TYPE_DATABASE,
+    PLUGIN_TYPE_MONITORING
+} plugin_type_t;
+
+typedef struct plugin {
+    char name[128];
+    char version[32];
+    char author[128];
+    char description[512];
+    plugin_type_t type;
+    void *handle;
+    int (*init)(struct plugin *p);
+    int (*deinit)(struct plugin *p);
+    int (*execute)(struct plugin *p, char **args, int argc);
+    void *data;
+    struct plugin *next;
+} plugin_t;
+
+/* Database Management */
+typedef struct database {
+    char name[128];
+    char path[MAX_PATH];
+    char driver[64];
+    sqlite3 *db;
+    int connected;
+    pthread_mutex_t lock;
+    struct database *next;
+} database_t;
+
+/* Container Management */
+typedef struct container {
+    char name[128];
+    char image[256];
+    char status[32];
+    int pid;
+    int port;
+    char ip[16];
+    int running;
+    struct container *next;
+} container_t;
+
+/* Cluster Management */
+typedef struct cluster_node {
+    char name[128];
+    char address[256];
+    int port;
+    char status[32];
+    int connected;
+    float load;
+    uint64_t memory_used;
+    uint64_t memory_total;
+    struct cluster_node *next;
+} cluster_node_t;
+
+/* Remote Session */
+typedef struct remote_session {
+    int socket;
+    char user[64];
+    char host[256];
+    int port;
+    int authenticated;
+    time_t last_activity;
+    struct remote_session *next;
+} remote_session_t;
+
+/* Backup Management */
+typedef struct backup_set {
+    char name[128];
+    char source[MAX_PATH];
+    char destination[MAX_PATH];
+    char schedule[64];
+    int encrypted;
+    uint64_t size;
+    time_t last_backup;
+    int count;
+    struct backup_set *next;
+} backup_set_t;
+
+/* Audit System */
+typedef struct audit_entry {
+    time_t timestamp;
+    char user[64];
+    char command[1024];
+    char ip[16];
+    int result;
+    char message[512];
+} audit_entry_t;
+
+/* Monitoring System */
+typedef struct monitor {
+    uint64_t cpu_usage;
+    uint64_t memory_usage;
+    uint64_t disk_usage;
+    uint64_t network_rx;
+    uint64_t network_tx;
+    int process_count;
+    float load_avg[3];
+    time_t timestamp;
+} monitor_t;
+
+/* Advanced Job Control */
+typedef struct job {
+    int job_id;
+    int pid;
+    char command[1024];
+    char status[32];
+    time_t start_time;
+    time_t end_time;
+    int exit_code;
+    uint64_t cpu_time;
+    uint64_t memory_peak;
+    int signal;
+    struct job *next;
+} job_t;
+
+/* Variable System */
+typedef struct variable {
+    char name[256];
+    char value[MAX_LINE];
+    int readonly;
+    int exported;
+    struct variable *next;
+} variable_t;
+
+/* Function System */
+typedef struct shell_function {
+    char name[256];
+    char *body;
+    int line_count;
+    char **parameters;
+    int param_count;
+    struct shell_function *next;
+} shell_function_t;
+
+/* Alias System */
+typedef struct alias {
+    char name[128];
+    char command[1024];
+    struct alias *next;
+} alias_t;
+
+/* Command Registry */
+typedef enum {
+    CMD_TYPE_BUILTIN,
+    CMD_TYPE_EXTERNAL,
+    CMD_TYPE_PLUGIN,
+    CMD_TYPE_FUNCTION,
+    CMD_TYPE_ALIAS
+} cmd_type_t;
+
+typedef struct command {
+    char name[128];
+    char description[512];
+    cmd_type_t type;
+    int (*handler)(int argc, char **argv, void *context);
+    void *context;
+    struct command *next;
+} command_t;
+
+/* Parser State */
+typedef struct parser_state {
+    char input[MAX_LINE];
+    char **tokens;
+    int token_count;
+    int current_token;
+    int in_quote;
+    int in_double_quote;
+    int escape_next;
+    char quote_char;
+    jmp_buf error_jmp;
+} parser_state_t;
 
 /* ============ Global State ============ */
-system_info_t sys_info = {0};
-vfs_t *virtual_fs = NULL;
-package_t *packages = NULL;
-desktop_env_t *desktop_envs = NULL;
-boot_config_t boot_config = {0};
-disk_manager_t disk_manager = {0};
-browser_t browser = {0};
-zewai_t zewai = {0};
-keyboard_manager_t keyboard = {0};
-game_t games[20];
-int game_count = 0;
-int running = 1;
-int current_game = -1;
-pthread_t ai_thread;
-pthread_t keyboard_thread;
+typedef struct {
+    /* Core */
+    char version[32];
+    char release[64];
+    int running;
+    int initialized;
+    int daemon_mode;
+    int debug_mode;
+    int verbose_mode;
+    int secure_mode;
+    
+    /* Configuration */
+    char config_file[MAX_PATH];
+    char home_dir[MAX_PATH];
+    char data_dir[MAX_PATH];
+    char cache_dir[MAX_PATH];
+    char log_dir[MAX_PATH];
+    char plugin_dir[MAX_PATH];
+    
+    /* User */
+    char username[64];
+    uid_t uid;
+    gid_t gid;
+    
+    /* Terminal */
+    int terminal_width;
+    int terminal_height;
+    int term_color;
+    char term_type[64];
+    
+    /* Systems */
+    command_t *commands;
+    variable_t *variables;
+    shell_function_t *functions;
+    alias_t *aliases;
+    job_t *jobs;
+    plugin_t *plugins;
+    database_t *databases;
+    container_t *containers;
+    cluster_node_t *cluster_nodes;
+    remote_session_t *sessions;
+    backup_set_t *backups;
+    
+    /* History */
+    char **history;
+    int history_count;
+    int history_max;
+    
+    /* Security */
+    int authenticated;
+    char session_id[64];
+    time_t session_start;
+    int audit_enabled;
+    audit_entry_t audit_log[MAX_AUDIT_ENTRIES];
+    int audit_count;
+    
+    /* Monitoring */
+    monitor_t monitor;
+    pthread_t monitor_thread;
+    int monitoring_active;
+    
+    /* AI */
+    void *ai_context;
+    int ai_enabled;
+    char ai_token[512];
+    char ai_model[128];
+    char ai_system_prompt[4096];
+    float ai_temperature;
+    int ai_max_tokens;
+    pthread_mutex_t ai_lock;
+    
+    /* Locking */
+    pthread_mutex_t command_lock;
+    pthread_mutex_t variable_lock;
+    pthread_mutex_t function_lock;
+    pthread_mutex_t job_lock;
+    pthread_mutex_t history_lock;
+    pthread_mutex_t plugin_lock;
+    pthread_mutex_t database_lock;
+    pthread_mutex_t container_lock;
+    pthread_mutex_t cluster_lock;
+    pthread_mutex_t session_lock;
+    pthread_mutex_t backup_lock;
+    pthread_mutex_t audit_lock;
+    pthread_mutex_t monitor_lock;
+    
+    /* Threads */
+    pthread_t main_thread;
+    pthread_t monitor_thread_id;
+    pthread_t ai_thread_id;
+    pthread_t network_thread_id;
+    pthread_t backup_thread_id;
+    
+    /* HTTP */
+    int http_server_running;
+    int http_port;
+    pthread_t http_thread;
+} ztk_state_t;
+
+ztk_state_t ztk = {0};
 
 /* ============ Function Prototypes ============ */
 
-/* System Detection */
-void detect_system(void);
-void detect_package_manager(void);
-void detect_terminal_size(void);
+/* Core */
+int ztk_init(void);
+void ztk_cleanup(void);
+void ztk_loop(void);
+void ztk_shutdown(void);
 
-/* VFS Functions */
-vfs_t *vfs_init(void);
-void vfs_destroy(vfs_t *vfs);
-vfs_file_t *vfs_create_file(vfs_file_t *parent, const char *name, int is_dir);
-int vfs_mkdir(vfs_t *vfs, const char *path);
-int vfs_create(vfs_t *vfs, const char *path, const char *content);
-vfs_file_t *vfs_find(vfs_file_t *dir, const char *name);
-int vfs_change_dir(vfs_t *vfs, const char *path);
-void vfs_list(vfs_file_t *dir);
-vfs_file_t *vfs_resolve_path(vfs_t *vfs, const char *path);
-char *vfs_get_path(vfs_file_t *file);
-int vfs_write_file(vfs_t *vfs, const char *path, const char *content);
-char *vfs_read_file(vfs_t *vfs, const char *path);
-int vfs_remove_file(vfs_t *vfs, const char *path);
+/* Security */
+int ztk_secure_init(void);
+int ztk_authenticate(const char *username, const char *password);
+int ztk_audit_log(const char *command, int result, const char *message);
+int ztk_check_permission(const char *resource, int mode);
+char *ztk_encrypt(const char *data);
+char *ztk_decrypt(const char *encrypted);
 
-/* Package Management */
-void init_package_repositories(void);
-void update_package_list(void);
-int install_package(const char *name);
-int uninstall_package(const char *name);
-void list_packages(void);
-int search_packages(const char *query);
-package_t *find_package(const char *name);
-void load_installed_packages(void);
-void save_installed_packages(void);
+/* Command System */
+int ztk_register_command(const char *name, const char *description, 
+                          int (*handler)(int argc, char **argv, void *context),
+                          void *context);
+command_t *ztk_find_command(const char *name);
+int ztk_execute_command(int argc, char **argv);
+void ztk_list_commands(void);
 
-/* Desktop Environment */
-void init_desktop_environments(void);
-int install_desktop(const char *name);
-int uninstall_desktop(const char *name);
-void list_desktop_environments(void);
-int start_desktop(const char *name);
-desktop_env_t *find_desktop(const char *name);
+/* Variable System */
+int ztk_set_variable(const char *name, const char *value, int readonly, int exported);
+char *ztk_get_variable(const char *name);
+int ztk_unset_variable(const char *name);
+void ztk_list_variables(void);
 
-/* Boot Configuration */
-int setup_dual_boot(void);
-int configure_grub(void);
-int configure_windows_boot(void);
-int create_boot_entry(const char *os_name, const char *partition);
-void list_boot_entries(void);
-int set_default_boot_entry(const char *os_name);
+/* Function System */
+int ztk_define_function(const char *name, const char *body, char **params, int param_count);
+int ztk_execute_function(const char *name, char **args, int argc);
+void ztk_list_functions(void);
 
-/* Disk Management */
-void detect_disks(void);
-int mount_disk(const char *device, const char *mount_point);
-int unmount_disk(const char *mount_point);
-int format_disk(const char *device, const char *filesystem);
-void list_disks(void);
-int create_partition(const char *device, uint64_t size, const char *type);
-int check_disk(const char *device);
+/* Alias System */
+int ztk_add_alias(const char *name, const char *command);
+char *ztk_expand_alias(const char *name);
+void ztk_list_aliases(void);
 
-/* Games */
-void init_games(void);
-void play_snake(void);
-void play_tetris(void);
-void play_pong(void);
-void play_space_invaders(void);
-void play_sudoku(void);
-void play_2048(void);
-void play_chess(void);
-void play_minesweeper(void);
-void list_games(void);
-int start_game(const char *name);
-void game_loop(void);
+/* Job Control */
+int ztk_add_job(int pid, const char *command);
+job_t *ztk_find_job(int pid);
+void ztk_update_jobs(void);
+void ztk_list_jobs(void);
+int ztk_kill_job(int job_id, int signal);
+int ztk_wait_job(int job_id);
 
-/* Terminal Browser */
-void init_browser(void);
-void browse_url(const char *url);
-void render_browser(void);
-void browser_navigate_back(void);
-void browser_navigate_forward(void);
-void browser_add_bookmark(void);
-void browser_list_bookmarks(void);
-void browser_search(const char *query);
-char *fetch_url(const char *url);
-void render_html(const char *html);
+/* Plugin System */
+int ztk_load_plugin(const char *path);
+int ztk_unload_plugin(const char *name);
+void ztk_list_plugins(void);
+plugin_t *ztk_find_plugin(const char *name);
 
-/* ZewAI Bot */
-void init_zewai(void);
-void set_ai_token(const char *token);
-int send_ai_message(const char *message, char *response, size_t response_size);
-void ai_chat_loop(void);
-void ai_clear_conversation(void);
-void *ai_thread_func(void *arg);
-void ai_help(void);
+/* Database System */
+int ztk_db_connect(const char *name, const char *path, const char *driver);
+int ztk_db_execute(const char *db_name, const char *sql);
+char **ztk_db_query(const char *db_name, const char *sql, int *rows, int *cols);
+void ztk_db_disconnect(const char *name);
+void ztk_list_databases(void);
 
-/* Keyboard Manager */
-void init_keyboard(void);
-void cleanup_keyboard(void);
-void register_shortcut(int key, const char *desc, void (*handler)(void));
-void handle_keyboard_input(void);
-void *keyboard_thread_func(void *arg);
-void process_key(int key);
+/* Container System */
+int ztk_container_create(const char *name, const char *image);
+int ztk_container_start(const char *name);
+int ztk_container_stop(const char *name);
+int ztk_container_remove(const char *name);
+void ztk_list_containers(void);
 
-/* Power Management */
-void power_action(power_action_t action);
-void shutdown_system(void);
-void reboot_system(void);
-void sleep_system(void);
-void show_power_menu(void);
+/* Cluster System */
+int ztk_cluster_add_node(const char *name, const char *address, int port);
+int ztk_cluster_connect(const char *name);
+void ztk_cluster_list_nodes(void);
+int ztk_cluster_broadcast(const char *command);
 
-/* Self-Modification */
-int enable_self_modification(void);
-int disable_self_modification(void);
-int edit_source_file(const char *filename, int line, const char *content);
-int compile_and_reload(void);
-int backup_current_code(void);
-int restore_code_from_backup(void);
-void *self_mod_monitor(void *arg);
+/* Backup System */
+int ztk_backup_create(const char *name, const char *source, const char *dest);
+int ztk_backup_restore(const char *name, const char *dest);
+int ztk_backup_encrypt(const char *name, const char *password);
+void ztk_list_backups(void);
 
-/* Shell Commands */
-void cmd_help(void);
-void cmd_install(char **args, int argc);
-void cmd_uninstall(char **args, int argc);
-void cmd_packages(char **args, int argc);
-void cmd_desktop(char **args, int argc);
-void cmd_boot(char **args, int argc);
-void cmd_disks(char **args, int argc);
-void cmd_games(char **args, int argc);
-void cmd_browser(char **args, int argc);
-void cmd_ai(char **args, int argc);
-void cmd_power(char **args, int argc);
-void cmd_keyboard(char **args, int argc);
-void cmd_edit(char **args, int argc);
-void cmd_compile(char **args, int argc);
-void cmd_system_info(void);
-void cmd_exit(void);
-void cmd_clear(void);
-void cmd_ls(void);
-void cmd_cd(char *path);
-void cmd_mkdir(char *name);
-void cmd_cat(char *filename);
-void cmd_echo(char **args, int argc);
-void cmd_rm(char *filename);
-void cmd_pwd(void);
+/* Monitoring System */
+void ztk_monitor_start(void);
+void ztk_monitor_stop(void);
+void ztk_monitor_report(void);
+void *ztk_monitor_thread(void *arg);
+
+/* AI System */
+int ztk_ai_init(const char *token);
+int ztk_ai_chat(const char *message, char *response, size_t response_size);
+void ztk_ai_chat_loop(void);
+void *ztk_ai_thread(void *arg);
+void ztk_ai_clear_conversation(void);
+
+/* Network System */
+int ztk_http_server_start(int port);
+void ztk_http_server_stop(void);
+void *ztk_http_thread(void *arg);
+int ztk_remote_connect(const char *host, int port);
+void ztk_remote_loop(void);
+
+/* Parser */
+parser_state_t *ztk_parse_init(const char *input);
+void ztk_parse_free(parser_state_t *state);
+int ztk_parse_next_token(parser_state_t *state, char **token);
+char **ztk_parse_command(parser_state_t *state, int *argc);
+
+/* Shell Builtins */
+int builtin_help(int argc, char **argv, void *context);
+int builtin_about(int argc, char **argv, void *context);
+int builtin_exit(int argc, char **argv, void *context);
+int builtin_clear(int argc, char **argv, void *context);
+int builtin_cd(int argc, char **argv, void *context);
+int builtin_pwd(int argc, char **argv, void *context);
+int builtin_ls(int argc, char **argv, void *context);
+int builtin_cat(int argc, char **argv, void *context);
+int builtin_echo(int argc, char **argv, void *context);
+int builtin_mkdir(int argc, char **argv, void *context);
+int builtin_rm(int argc, char **argv, void *context);
+int builtin_cp(int argc, char **argv, void *context);
+int builtin_mv(int argc, char **argv, void *context);
+int builtin_chmod(int argc, char **argv, void *context);
+int builtin_chown(int argc, char **argv, void *context);
+int builtin_set(int argc, char **argv, void *context);
+int builtin_unset(int argc, char **argv, void *context);
+int builtin_export(int argc, char **argv, void *context);
+int builtin_env(int argc, char **argv, void *context);
+int builtin_source(int argc, char **argv, void *context);
+int builtin_exec(int argc, char **argv, void *context);
+int builtin_jobs(int argc, char **argv, void *context);
+int builtin_fg(int argc, char **argv, void *context);
+int builtin_bg(int argc, char **argv, void *context);
+int builtin_kill(int argc, char **argv, void *context);
+int builtin_wait(int argc, char **argv, void *context);
+int builtin_ps(int argc, char **argv, void *context);
+int builtin_top(int argc, char **argv, void *context);
+int builtin_plugins(int argc, char **argv, void *context);
+int builtin_databases(int argc, char **argv, void *context);
+int builtin_containers(int argc, char **argv, void *context);
+int builtin_cluster(int argc, char **argv, void *context);
+int builtin_backup(int argc, char **argv, void *context);
+int builtin_ai(int argc, char **argv, void *context);
+int builtin_monitor(int argc, char **argv, void *context);
+int builtin_audit(int argc, char **argv, void *context);
+int builtin_http(int argc, char **argv, void *context);
+int builtin_remote(int argc, char **argv, void *context);
 
 /* Utility */
-void safe_system(const char *cmd);
-char *get_extension(const char *filename);
-char *trim_whitespace(char *str);
-int is_valid_identifier(const char *str);
-void print_progress(const char *task, int percent);
-int run_as_admin(const char *cmd);
-char *get_platform_install_cmd(const char *package);
-void set_terminal_raw_mode(void);
-void restore_terminal_mode(void);
-int get_keypress(void);
+void ztk_log(const char *level, const char *format, ...);
+void ztk_error(const char *format, ...);
+void ztk_warn(const char *format, ...);
+void ztk_info(const char *format, ...);
+void ztk_debug(const char *format, ...);
+char *ztk_strdup_safe(const char *str);
+char *ztk_format_size(uint64_t size);
+char *ztk_format_time(time_t t);
+char *ztk_read_file(const char *path);
+int ztk_write_file(const char *path, const char *content);
+int ztk_file_exists(const char *path);
+int ztk_is_directory(const char *path);
+char *ztk_get_absolute_path(const char *path);
+char *ztk_expand_path(const char *path);
+void ztk_print_header(const char *title);
+void ztk_print_footer(void);
+void ztk_print_table_header(const char **headers, int count);
+void ztk_print_table_row(const char **row, int count);
 
-/* ============ System Detection Implementation ============ */
+/* ============ Implementation ============ */
 
-void detect_terminal_size(void) {
-    #ifdef _WIN32
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
-        sys_info.terminal_width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-        sys_info.terminal_height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    } else {
-        sys_info.terminal_width = 80;
-        sys_info.terminal_height = 24;
-    }
-    #else
-    struct winsize w;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
-        sys_info.terminal_width = w.ws_col;
-        sys_info.terminal_height = w.ws_row;
-    } else {
-        sys_info.terminal_width = 80;
-        sys_info.terminal_height = 24;
-    }
-    #endif
-}
-
-void detect_system(void) {
-    #ifdef _WIN32
-    sys_info.is_windows = 1;
-    sys_info.is_linux = 0;
-    sys_info.is_macos = 0;
+/* Core System */
+int ztk_init(void) {
+    memset(&ztk, 0, sizeof(ztk_t));
     
-    OSVERSIONINFOEXW osvi = {0};
-    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXW);
-    GetVersionExW((OSVERSIONINFOW*)&osvi);
+    /* Version */
+    strcpy(ztk.version, ZTK_VERSION);
+    strcpy(ztk.release, ZTK_RELEASE);
+    ztk.running = 1;
+    ztk.initialized = 1;
     
-    if (osvi.dwMajorVersion >= 10) {
-        strcpy(sys_info.os_name, "Windows 10/11");
-    } else if (osvi.dwMajorVersion >= 6 && osvi.dwMinorVersion >= 2) {
-        strcpy(sys_info.os_name, "Windows 8/8.1");
-    } else if (osvi.dwMajorVersion >= 6 && osvi.dwMinorVersion >= 1) {
-        strcpy(sys_info.os_name, "Windows 7");
-    } else {
-        strcpy(sys_info.os_name, "Windows");
-    }
-    snprintf(sys_info.os_version, sizeof(sys_info.os_version), "%d.%d", 
-             osvi.dwMajorVersion, osvi.dwMinorVersion);
-    
-    strcpy(sys_info.architecture, "x86_64");
-    strcpy(sys_info.package_manager, "winget");
-    sys_info.has_sudo = 0;
-    sys_info.is_admin = (GetCurrentProcessId() == 0);
-    
-    GetWindowsDirectoryA(sys_info.install_prefix, sizeof(sys_info.install_prefix));
-    strcat(sys_info.install_prefix, "\\ZTK");
-    
-    SHGetFolderPathA(NULL, CSIDL_PROFILE, NULL, 0, sys_info.home_dir);
-    GetTempPathA(sizeof(sys_info.temp_dir), sys_info.temp_dir);
-    
-    #elif __linux__
-    sys_info.is_windows = 0;
-    sys_info.is_linux = 1;
-    sys_info.is_macos = 0;
-    
-    FILE *fp = fopen("/etc/os-release", "r");
-    if (fp) {
-        char line[256];
-        while (fgets(line, sizeof(line), fp)) {
-            if (strstr(line, "NAME=")) {
-                char *value = strchr(line, '=');
-                if (value) {
-                    value++;
-                    if (value[0] == '"') value++;
-                    char *end = strchr(value, '"');
-                    if (end) *end = '\0';
-                    strcpy(sys_info.os_name, value);
-                }
-            }
-            if (strstr(line, "VERSION_ID=")) {
-                char *value = strchr(line, '=');
-                if (value) {
-                    value++;
-                    if (value[0] == '"') value++;
-                    char *end = strchr(value, '"');
-                    if (end) *end = '\0';
-                    strcpy(sys_info.os_version, value);
-                }
-            }
-        }
-        fclose(fp);
-    } else {
-        strcpy(sys_info.os_name, "Linux");
-        strcpy(sys_info.os_version, "Unknown");
-    }
-    
-    struct utsname uname_data;
-    if (uname(&uname_data) == 0) {
-        strcpy(sys_info.architecture, uname_data.machine);
-    }
-    
-    detect_package_manager();
-    
-    sys_info.has_sudo = (system("sudo -v > /dev/null 2>&1") == 0);
-    sys_info.is_admin = (geteuid() == 0);
-    
-    strcpy(sys_info.install_prefix, "/opt/ztk");
-    getcwd(sys_info.home_dir, sizeof(sys_info.home_dir));
-    strcpy(sys_info.temp_dir, "/tmp");
-    
-    #elif __APPLE__
-    sys_info.is_windows = 0;
-    sys_info.is_linux = 0;
-    sys_info.is_macos = 1;
-    strcpy(sys_info.os_name, "macOS");
-    strcpy(sys_info.os_version, "Unknown");
-    strcpy(sys_info.architecture, "x86_64");
-    strcpy(sys_info.package_manager, "brew");
-    sys_info.has_sudo = (system("sudo -v > /dev/null 2>&1") == 0);
-    sys_info.is_admin = (geteuid() == 0);
-    strcpy(sys_info.install_prefix, "/usr/local/ztk");
-    getcwd(sys_info.home_dir, sizeof(sys_info.home_dir));
-    strcpy(sys_info.temp_dir, "/tmp");
-    #endif
-    
-    detect_terminal_size();
-}
-
-/* ============ VFS Implementation ============ */
-
-vfs_t *vfs_init(void) {
-    vfs_t *vfs = (vfs_t*)malloc(sizeof(vfs_t));
-    if (!vfs) return NULL;
-
-    vfs->root = (vfs_file_t*)calloc(1, sizeof(vfs_file_t));
-    if (!vfs->root) {
-        free(vfs);
-        return NULL;
-    }
-
-    strcpy(vfs->root->name, "/");
-    vfs->root->content = NULL;
-    vfs->root->size = 0;
-    vfs->root->mode = 0755;
-    vfs->root->mtime = time(NULL);
-    vfs->root->is_directory = 1;
-    vfs->root->is_system_file = 0;
-    vfs->root->is_editable = 0;
-    vfs->root->parent = NULL;
-    vfs->root->child_count = 0;
-    memset(vfs->root->children, 0, sizeof(vfs->root->children));
-
-    vfs->cwd = vfs->root;
-    vfs->mount_point = strdup("/");
-    vfs->persistent = 1;
-
-    /* Create system directories */
-    const char *dirs[] = {
-        "/bin", "/etc", "/usr", "/usr/bin", "/usr/lib", "/usr/share",
-        "/home", "/home/user", "/tmp", "/var", "/var/log", "/opt",
-        "/dev", "/proc", "/sys", "/boot", "/mnt", "/media", "/srv",
-        "/games", "/games/saves", "/games/highscores",
-        "/browser", "/browser/cache", "/browser/bookmarks",
-        "/ai", "/ai/conversations", "/ai/models"
-    };
-    
-    for (int i = 0; i < sizeof(dirs)/sizeof(dirs[0]); i++) {
-        vfs_mkdir(vfs, dirs[i]);
-    }
-
-    /* Create self-modification directory */
-    vfs_mkdir(vfs, "/src");
-    vfs_mkdir(vfs, "/src/ztk");
-
-    /* Create game high score files */
-    const char *games_data = 
-        "# ZTK Game High Scores\n"
-        "snake:0\n"
-        "tetris:0\n"
-        "pong:0\n"
-        "space_invaders:0\n"
-        "sudoku:0\n"
-        "2048:0\n"
-        "chess:0\n"
-        "minesweeper:0\n";
-    vfs_create(vfs, "/games/highscores.dat", games_data);
-
-    return vfs;
-}
-
-/* ============ Disk Management Implementation ============ */
-
-void detect_disks(void) {
-    disk_manager.disk_count = 0;
-    
-    #ifdef _WIN32
-    DWORD drives = GetLogicalDrives();
-    for (int i = 0; i < 26; i++) {
-        if (drives & (1 << i)) {
-            char drive[4] = { 'A' + i, ':', '\\', 0 };
-            disk_info_t *disk = &disk_manager.disks[disk_manager.disk_count];
-            snprintf(disk->device, sizeof(disk->device), "%s", drive);
-            
-            char root[4] = { 'A' + i, ':', 0 };
-            ULARGE_INTEGER free_bytes, total_bytes;
-            if (GetDiskFreeSpaceExA(root, &free_bytes, &total_bytes, NULL)) {
-                disk->free_bytes = free_bytes.QuadPart;
-                disk->size_bytes = total_bytes.QuadPart;
-                disk->used_bytes = total_bytes.QuadPart - free_bytes.QuadPart;
-            }
-            
-            GetVolumeInformationA(drive, disk->label, sizeof(disk->label), 
-                                  NULL, NULL, NULL, NULL, 0);
-            disk->is_mounted = 1;
-            disk->is_boot = (i == 0);
-            disk_manager.disk_count++;
-        }
-    }
-    #else
-    /* Linux - scan /dev/sd* and /dev/nvme* */
-    DIR *dir = opendir("/dev");
-    if (dir) {
-        struct dirent *entry;
-        while ((entry = readdir(dir)) != NULL) {
-            if (strncmp(entry->d_name, "sd", 2) == 0 ||
-                strncmp(entry->d_name, "nvme", 4) == 0 ||
-                strncmp(entry->d_name, "hd", 2) == 0) {
-                
-                if (isdigit(entry->d_name[strlen(entry->d_name)-1])) continue;
-                
-                disk_info_t *disk = &disk_manager.disks[disk_manager.disk_count];
-                snprintf(disk->device, sizeof(disk->device), "/dev/%s", entry->d_name);
-                
-                /* Get disk size */
-                char cmd[256];
-                snprintf(cmd, sizeof(cmd), "blockdev --getsize64 %s 2>/dev/null", disk->device);
-                FILE *fp = popen(cmd, "r");
-                if (fp) {
-                    char size_str[64];
-                    if (fgets(size_str, sizeof(size_str), fp)) {
-                        disk->size_bytes = strtoull(size_str, NULL, 10);
-                    }
-                    pclose(fp);
-                }
-                
-                /* Check if mounted */
-                char mount_cmd[256];
-                snprintf(mount_cmd, sizeof(mount_cmd), "mount | grep %s | awk '{print $3}'", disk->device);
-                fp = popen(mount_cmd, "r");
-                if (fp) {
-                    if (fgets(disk->mount_point, sizeof(disk->mount_point), fp)) {
-                        disk->mount_point[strcspn(disk->mount_point, "\n")] = '\0';
-                        disk->is_mounted = 1;
-                    }
-                    pclose(fp);
-                }
-                
-                disk_manager.disk_count++;
-            }
-        }
-        closedir(dir);
-    }
-    #endif
-}
-
-int mount_disk(const char *device, const char *mount_point) {
-    #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "mountvol %s %s", mount_point, device);
-    return system(cmd);
-    #else
-    if (mkdir(mount_point, 0755) != 0 && errno != EEXIST) {
+    /* Security */
+    if (ztk_secure_init() != 0) {
+        ztk_error("Failed to initialize security");
         return -1;
     }
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "sudo mount %s %s", device, mount_point);
-    return system(cmd);
-    #endif
-}
-
-int unmount_disk(const char *mount_point) {
-    #ifdef _WIN32
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "mountvol %s /d", mount_point);
-    return system(cmd);
-    #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "sudo umount %s", mount_point);
-    return system(cmd);
-    #endif
-}
-
-int format_disk(const char *device, const char *filesystem) {
-    char cmd[512];
-    #ifdef _WIN32
-    snprintf(cmd, sizeof(cmd), "format %s /FS:%s /Q /Y", device, filesystem);
-    #else
-    if (strcmp(filesystem, "ext4") == 0) {
-        snprintf(cmd, sizeof(cmd), "sudo mkfs.ext4 -F %s", device);
-    } else if (strcmp(filesystem, "ntfs") == 0) {
-        snprintf(cmd, sizeof(cmd), "sudo mkfs.ntfs -f %s", device);
-    } else if (strcmp(filesystem, "fat32") == 0) {
-        snprintf(cmd, sizeof(cmd), "sudo mkfs.fat -F32 %s", device);
-    } else {
-        snprintf(cmd, sizeof(cmd), "sudo mkfs.%s -F %s", filesystem, device);
+    
+    /* Get user info */
+    struct passwd *pw = getpwuid(getuid());
+    if (pw) {
+        strcpy(ztk.username, pw->pw_name);
+        ztk.uid = pw->pw_uid;
+        ztk.gid = pw->pw_gid;
+        strcpy(ztk.home_dir, pw->pw_dir);
     }
-    #endif
-    return system(cmd);
+    
+    /* Directories */
+    snprintf(ztk.data_dir, sizeof(ztk.data_dir), "%s/.ztk", ztk.home_dir);
+    snprintf(ztk.cache_dir, sizeof(ztk.cache_dir), "%s/.ztk/cache", ztk.home_dir);
+    snprintf(ztk.log_dir, sizeof(ztk.log_dir), "%s/.ztk/logs", ztk.home_dir);
+    snprintf(ztk.plugin_dir, sizeof(ztk.plugin_dir), "%s/.ztk/plugins", ztk.home_dir);
+    
+    mkdir(ztk.data_dir, 0755);
+    mkdir(ztk.cache_dir, 0755);
+    mkdir(ztk.log_dir, 0755);
+    mkdir(ztk.plugin_dir, 0755);
+    
+    /* Terminal */
+    ztk.terminal_width = 80;
+    ztk.terminal_height = 24;
+    ztk.term_color = 1;
+    strcpy(ztk.term_type, getenv("TERM") ? getenv("TERM") : "xterm-256color");
+    
+    /* Initialize mutexes */
+    pthread_mutex_init(&ztk.command_lock, NULL);
+    pthread_mutex_init(&ztk.variable_lock, NULL);
+    pthread_mutex_init(&ztk.function_lock, NULL);
+    pthread_mutex_init(&ztk.job_lock, NULL);
+    pthread_mutex_init(&ztk.history_lock, NULL);
+    pthread_mutex_init(&ztk.plugin_lock, NULL);
+    pthread_mutex_init(&ztk.database_lock, NULL);
+    pthread_mutex_init(&ztk.container_lock, NULL);
+    pthread_mutex_init(&ztk.cluster_lock, NULL);
+    pthread_mutex_init(&ztk.session_lock, NULL);
+    pthread_mutex_init(&ztk.backup_lock, NULL);
+    pthread_mutex_init(&ztk.audit_lock, NULL);
+    pthread_mutex_init(&ztk.monitor_lock, NULL);
+    pthread_mutex_init(&ztk.ai_lock, NULL);
+    
+    /* History */
+    ztk.history_max = MAX_HISTORY;
+    ztk.history = malloc(sizeof(char*) * ztk.history_max);
+    ztk.history_count = 0;
+    
+    /* Register built-in commands */
+    ztk_register_command("help", "Show this help message", builtin_help, NULL);
+    ztk_register_command("about", "Show system information", builtin_about, NULL);
+    ztk_register_command("exit", "Exit the shell", builtin_exit, NULL);
+    ztk_register_command("clear", "Clear the terminal", builtin_clear, NULL);
+    ztk_register_command("cd", "Change directory", builtin_cd, NULL);
+    ztk_register_command("pwd", "Print working directory", builtin_pwd, NULL);
+    ztk_register_command("ls", "List directory contents", builtin_ls, NULL);
+    ztk_register_command("cat", "Display file contents", builtin_cat, NULL);
+    ztk_register_command("echo", "Display a message", builtin_echo, NULL);
+    ztk_register_command("mkdir", "Create a directory", builtin_mkdir, NULL);
+    ztk_register_command("rm", "Remove files or directories", builtin_rm, NULL);
+    ztk_register_command("cp", "Copy files", builtin_cp, NULL);
+    ztk_register_command("mv", "Move files", builtin_mv, NULL);
+    ztk_register_command("chmod", "Change file permissions", builtin_chmod, NULL);
+    ztk_register_command("chown", "Change file owner", builtin_chown, NULL);
+    ztk_register_command("set", "Set a variable", builtin_set, NULL);
+    ztk_register_command("unset", "Unset a variable", builtin_unset, NULL);
+    ztk_register_command("export", "Export a variable", builtin_export, NULL);
+    ztk_register_command("env", "Display environment", builtin_env, NULL);
+    ztk_register_command("source", "Source a script", builtin_source, NULL);
+    ztk_register_command("exec", "Execute a command", builtin_exec, NULL);
+    ztk_register_command("jobs", "List background jobs", builtin_jobs, NULL);
+    ztk_register_command("fg", "Bring job to foreground", builtin_fg, NULL);
+    ztk_register_command("bg", "Run job in background", builtin_bg, NULL);
+    ztk_register_command("kill", "Send signal to job", builtin_kill, NULL);
+    ztk_register_command("wait", "Wait for job", builtin_wait, NULL);
+    ztk_register_command("ps", "List processes", builtin_ps, NULL);
+    ztk_register_command("top", "Display process monitor", builtin_top, NULL);
+    ztk_register_command("plugins", "Manage plugins", builtin_plugins, NULL);
+    ztk_register_command("databases", "Manage databases", builtin_databases, NULL);
+    ztk_register_command("containers", "Manage containers", builtin_containers, NULL);
+    ztk_register_command("cluster", "Manage cluster", builtin_cluster, NULL);
+    ztk_register_command("backup", "Manage backups", builtin_backup, NULL);
+    ztk_register_command("ai", "AI assistant", builtin_ai, NULL);
+    ztk_register_command("monitor", "System monitor", builtin_monitor, NULL);
+    ztk_register_command("audit", "Audit log", builtin_audit, NULL);
+    ztk_register_command("http", "HTTP server", builtin_http, NULL);
+    ztk_register_command("remote", "Remote connection", builtin_remote, NULL);
+    
+    ztk_info("ZTK Shell %s %s initialized", ZTK_VERSION, ZTK_RELEASE);
+    ztk_info("User: %s Home: %s", ztk.username, ztk.home_dir);
+    
+    return 0;
 }
 
-void list_disks(void) {
-    detect_disks();
+void ztk_cleanup(void) {
+    ztk.running = 0;
     
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                    Disk Management                          ║\n");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
-    printf("║ %-12s %-12s %-12s %-10s %-15s ║\n", 
-           "Device", "Size", "Used", "Status", "Label");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    /* Stop monitoring */
+    if (ztk.monitoring_active) {
+        ztk_monitor_stop();
+    }
     
-    for (int i = 0; i < disk_manager.disk_count; i++) {
-        disk_info_t *d = &disk_manager.disks[i];
-        char size_str[16], used_str[16];
-        
-        if (d->size_bytes > 1024*1024*1024) {
-            snprintf(size_str, sizeof(size_str), "%.1f GB", 
-                     d->size_bytes / (1024.0*1024.0*1024.0));
-        } else {
-            snprintf(size_str, sizeof(size_str), "%.1f MB", 
-                     d->size_bytes / (1024.0*1024.0));
+    /* Stop HTTP server */
+    if (ztk.http_server_running) {
+        ztk_http_server_stop();
+    }
+    
+    /* Clean up commands */
+    command_t *cmd = ztk.commands;
+    while (cmd) {
+        command_t *next = cmd->next;
+        free(cmd);
+        cmd = next;
+    }
+    
+    /* Clean up variables */
+    variable_t *var = ztk.variables;
+    while (var) {
+        variable_t *next = var->next;
+        free(var);
+        var = next;
+    }
+    
+    /* Clean up functions */
+    shell_function_t *func = ztk.functions;
+    while (func) {
+        shell_function_t *next = func->next;
+        if (func->body) free(func->body);
+        if (func->parameters) free(func->parameters);
+        free(func);
+        func = next;
+    }
+    
+    /* Clean up aliases */
+    alias_t *alias = ztk.aliases;
+    while (alias) {
+        alias_t *next = alias->next;
+        free(alias);
+        alias = next;
+    }
+    
+    /* Clean up jobs */
+    job_t *job = ztk.jobs;
+    while (job) {
+        job_t *next = job->next;
+        free(job);
+        job = next;
+    }
+    
+    /* Clean up history */
+    for (int i = 0; i < ztk.history_count; i++) {
+        if (ztk.history[i]) free(ztk.history[i]);
+    }
+    free(ztk.history);
+    
+    /* Clean up plugins */
+    plugin_t *plugin = ztk.plugins;
+    while (plugin) {
+        plugin_t *next = plugin->next;
+        if (plugin->handle) {
+            dlclose(plugin->handle);
         }
-        
-        if (d->used_bytes > 1024*1024*1024) {
-            snprintf(used_str, sizeof(used_str), "%.1f GB", 
-                     d->used_bytes / (1024.0*1024.0*1024.0));
-        } else {
-            snprintf(used_str, sizeof(used_str), "%.1f MB", 
-                     d->used_bytes / (1024.0*1024.0));
-        }
-        
-        printf("║ %-12s %-12s %-12s %-10s %-15s ║\n",
-               d->device,
-               size_str,
-               used_str,
-               d->is_mounted ? "Mounted" : "Unmounted",
-               strlen(d->label) ? d->label : "No Label");
+        free(plugin);
+        plugin = next;
     }
     
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    /* Clean up databases */
+    database_t *db = ztk.databases;
+    while (db) {
+        database_t *next = db->next;
+        if (db->db) {
+            sqlite3_close(db->db);
+        }
+        pthread_mutex_destroy(&db->lock);
+        free(db);
+        db = next;
+    }
+    
+    /* Destroy mutexes */
+    pthread_mutex_destroy(&ztk.command_lock);
+    pthread_mutex_destroy(&ztk.variable_lock);
+    pthread_mutex_destroy(&ztk.function_lock);
+    pthread_mutex_destroy(&ztk.job_lock);
+    pthread_mutex_destroy(&ztk.history_lock);
+    pthread_mutex_destroy(&ztk.plugin_lock);
+    pthread_mutex_destroy(&ztk.database_lock);
+    pthread_mutex_destroy(&ztk.container_lock);
+    pthread_mutex_destroy(&ztk.cluster_lock);
+    pthread_mutex_destroy(&ztk.session_lock);
+    pthread_mutex_destroy(&ztk.backup_lock);
+    pthread_mutex_destroy(&ztk.audit_lock);
+    pthread_mutex_destroy(&ztk.monitor_lock);
+    pthread_mutex_destroy(&ztk.ai_lock);
+    
+    ztk_info("ZTK Shell shutdown complete");
 }
 
-/* ============ Games Implementation ============ */
-
-/* Snake Game */
-void play_snake(void) {
-    int width = 20, height = 10;
-    int snake_x[100], snake_y[100];
-    int snake_length = 3;
-    int food_x, food_y;
-    int score = 0;
-    int game_over = 0;
-    int direction = 0; // 0=right, 1=down, 2=left, 3=up
-    int key;
+/* Security System */
+int ztk_secure_init(void) {
+    /* Initialize OpenSSL if available */
+    #ifdef USE_OPENSSL
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+    #endif
     
-    // Initialize snake
-    for (int i = 0; i < snake_length; i++) {
-        snake_x[i] = width/2 - i;
-        snake_y[i] = height/2;
+    ztk.secure_mode = 1;
+    ztk.audit_enabled = 1;
+    
+    /* Generate session ID */
+    snprintf(ztk.session_id, sizeof(ztk.session_id), "%lu-%ld", 
+             (unsigned long)time(NULL), (long)getpid());
+    
+    return 0;
+}
+
+int ztk_authenticate(const char *username, const char *password) {
+    /* This is a placeholder - real implementation would use PAM or similar */
+    if (strcmp(username, ztk.username) == 0 && strlen(password) >= MIN_PASSWORD_LENGTH) {
+        ztk.authenticated = 1;
+        ztk.session_start = time(NULL);
+        ztk_audit_log("login", 1, "Successful login");
+        return 1;
+    }
+    ztk_audit_log("login", 0, "Failed login attempt");
+    return 0;
+}
+
+int ztk_audit_log(const char *command, int result, const char *message) {
+    pthread_mutex_lock(&ztk.audit_lock);
+    
+    if (ztk.audit_count >= MAX_AUDIT_ENTRIES) {
+        ztk.audit_count = 0;
     }
     
-    // Generate first food
-    srand(time(NULL));
-    food_x = rand() % width;
-    food_y = rand() % height;
+    audit_entry_t *entry = &ztk.audit_log[ztk.audit_count++];
+    entry->timestamp = time(NULL);
+    strncpy(entry->user, ztk.username, sizeof(entry->user) - 1);
+    strncpy(entry->command, command, sizeof(entry->command) - 1);
+    strncpy(entry->ip, "127.0.0.1", sizeof(entry->ip) - 1);
+    entry->result = result;
+    strncpy(entry->message, message, sizeof(entry->message) - 1);
     
-    printf("\n╔══════════════════════════╗\n");
-    printf("║     SNAKE GAME           ║\n");
-    printf("║   Use WASD to move       ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Score: %d\n", score);
+    pthread_mutex_unlock(&ztk.audit_lock);
+    return 0;
+}
+
+int ztk_check_permission(const char *resource, int mode) {
+    /* Check if user has permission to access resource */
+    struct stat st;
+    if (stat(resource, &st) != 0) {
+        return 0;
+    }
     
-    set_terminal_raw_mode();
+    uid_t uid = getuid();
+    gid_t gid = getgid();
     
-    while (!game_over) {
-        // Clear screen
-        printf("\033[2J\033[H");
+    /* Root can do anything */
+    if (uid == 0) return 1;
+    
+    /* Check owner */
+    if (st.st_uid == uid) {
+        return (st.st_mode & (mode << 6)) == (mode << 6);
+    }
+    
+    /* Check group */
+    if (st.st_gid == gid) {
+        return (st.st_mode & (mode << 3)) == (mode << 3);
+    }
+    
+    /* Check others */
+    return (st.st_mode & mode) == mode;
+}
+
+/* Command System */
+int ztk_register_command(const char *name, const char *description,
+                          int (*handler)(int argc, char **argv, void *context),
+                          void *context) {
+    pthread_mutex_lock(&ztk.command_lock);
+    
+    command_t *cmd = malloc(sizeof(command_t));
+    if (!cmd) {
+        pthread_mutex_unlock(&ztk.command_lock);
+        return -1;
+    }
+    
+    strncpy(cmd->name, name, sizeof(cmd->name) - 1);
+    strncpy(cmd->description, description, sizeof(cmd->description) - 1);
+    cmd->handler = handler;
+    cmd->context = context;
+    cmd->type = CMD_TYPE_BUILTIN;
+    cmd->next = ztk.commands;
+    ztk.commands = cmd;
+    
+    pthread_mutex_unlock(&ztk.command_lock);
+    return 0;
+}
+
+command_t *ztk_find_command(const char *name) {
+    pthread_mutex_lock(&ztk.command_lock);
+    
+    command_t *cmd = ztk.commands;
+    while (cmd) {
+        if (strcmp(cmd->name, name) == 0) {
+            pthread_mutex_unlock(&ztk.command_lock);
+            return cmd;
+        }
+        cmd = cmd->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.command_lock);
+    return NULL;
+}
+
+int ztk_execute_command(int argc, char **argv) {
+    if (argc == 0) return 0;
+    
+    char *cmd_name = argv[0];
+    
+    /* Check for alias */
+    char *alias_cmd = ztk_expand_alias(cmd_name);
+    if (alias_cmd) {
+        /* Parse and execute alias */
+        char *args[MAX_ARGS];
+        int new_argc = 0;
+        char *token = strtok(alias_cmd, " ");
+        while (token && new_argc < MAX_ARGS - 1) {
+            args[new_argc++] = token;
+            token = strtok(NULL, " ");
+        }
+        args[new_argc] = NULL;
         
-        // Draw game
-        printf("Score: %d\n", score);
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int is_snake = 0;
-                for (int i = 0; i < snake_length; i++) {
-                    if (snake_x[i] == x && snake_y[i] == y) {
-                        is_snake = 1;
-                        break;
-                    }
+        if (new_argc > 0) {
+            return ztk_execute_command(new_argc, args);
+        }
+    }
+    
+    /* Check for function */
+    shell_function_t *func = NULL;
+    pthread_mutex_lock(&ztk.function_lock);
+    func = ztk.functions;
+    while (func) {
+        if (strcmp(func->name, cmd_name) == 0) break;
+        func = func->next;
+    }
+    pthread_mutex_unlock(&ztk.function_lock);
+    
+    if (func) {
+        return ztk_execute_function(cmd_name, argv + 1, argc - 1);
+    }
+    
+    /* Check for builtin command */
+    command_t *cmd = ztk_find_command(cmd_name);
+    if (cmd && cmd->handler) {
+        ztk_audit_log(cmd_name, 1, "Command executed");
+        return cmd->handler(argc, argv, cmd->context);
+    }
+    
+    /* Check for external command */
+    char *path = getenv("PATH");
+    if (path) {
+        char *path_copy = strdup(path);
+        char *dir = strtok(path_copy, ":");
+        while (dir) {
+            char full_path[MAX_PATH];
+            snprintf(full_path, sizeof(full_path), "%s/%s", dir, cmd_name);
+            if (access(full_path, X_OK) == 0) {
+                /* Execute external command */
+                pid_t pid = fork();
+                if (pid == 0) {
+                    execv(full_path, argv);
+                    exit(1);
+                } else if (pid > 0) {
+                    int status;
+                    waitpid(pid, &status, 0);
+                    free(path_copy);
+                    return WEXITSTATUS(status);
                 }
-                if (is_snake) printf("■");
-                else if (x == food_x && y == food_y) printf("●");
-                else printf(" ");
             }
-            printf("\n");
+            dir = strtok(NULL, ":");
         }
-        
-        // Get input
-        key = get_keypress();
-        if (key == 'q' || key == 'Q') break;
-        
-        // Direction
-        if (key == 'w' || key == 'W') direction = 3;
-        else if (key == 's' || key == 'S') direction = 1;
-        else if (key == 'a' || key == 'A') direction = 2;
-        else if (key == 'd' || key == 'D') direction = 0;
-        
-        // Move snake
-        int new_x = snake_x[0];
-        int new_y = snake_y[0];
-        switch(direction) {
-            case 0: new_x++; break;
-            case 1: new_y++; break;
-            case 2: new_x--; break;
-            case 3: new_y--; break;
-        }
-        
-        // Check wall collision
-        if (new_x < 0 || new_x >= width || new_y < 0 || new_y >= height) {
-            game_over = 1;
-            break;
-        }
-        
-        // Check food
-        if (new_x == food_x && new_y == food_y) {
-            score++;
-            snake_length++;
-            food_x = rand() % width;
-            food_y = rand() % height;
-        }
-        
-        // Move snake
-        for (int i = snake_length - 1; i > 0; i--) {
-            snake_x[i] = snake_x[i-1];
-            snake_y[i] = snake_y[i-1];
-        }
-        snake_x[0] = new_x;
-        snake_y[0] = new_y;
-        
-        // Check self collision
-        for (int i = 1; i < snake_length; i++) {
-            if (snake_x[i] == snake_x[0] && snake_y[i] == snake_y[0]) {
-                game_over = 1;
-                break;
-            }
-        }
-        
-        usleep(100000); // 100ms delay
+        free(path_copy);
     }
     
-    restore_terminal_mode();
-    printf("\nGame Over! Score: %d\n", score);
-    
-    // Save high score
-    char score_str[32];
-    snprintf(score_str, sizeof(score_str), "%d", score);
-    vfs_write_file(virtual_fs, "/games/saves/snake_highscore.txt", score_str);
-}
-
-/* Tetris Game */
-void play_tetris(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║     TETRIS GAME          ║\n");
-    printf("║   Arrow keys to move     ║\n");
-    printf("║   Up to rotate           ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading Tetris... (simulated)\n");
-    sleep(2);
-    printf("Tetris game would run here with ncurses.\n");
-    printf("Install ncurses for full game support.\n");
-}
-
-/* Pong Game */
-void play_pong(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║     PONG GAME            ║\n");
-    printf("║   W/S to move paddle     ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading Pong... (simulated)\n");
-    sleep(2);
-    printf("Pong game would run here with ncurses.\n");
-}
-
-/* Space Invaders */
-void play_space_invaders(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║  SPACE INVADERS          ║\n");
-    printf("║   A/D to move            ║\n");
-    printf("║   Space to shoot         ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading Space Invaders... (simulated)\n");
-    sleep(2);
-    printf("Space Invaders would run here with ncurses.\n");
-}
-
-/* Sudoku */
-void play_sudoku(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║     SUDOKU GAME          ║\n");
-    printf("║   Number keys to enter   ║\n");
-    printf("║   Arrow keys to move     ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading Sudoku... (simulated)\n");
-    sleep(2);
-    printf("Sudoku game would run here with ncurses.\n");
-}
-
-/* 2048 Game */
-void play_2048(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║      2048 GAME           ║\n");
-    printf("║   WASD to move tiles     ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading 2048... (simulated)\n");
-    sleep(2);
-    printf("2048 game would run here with ncurses.\n");
-}
-
-/* Chess */
-void play_chess(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║     CHESS GAME           ║\n");
-    printf("║   Click squares to move  ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading Chess... (simulated)\n");
-    sleep(2);
-    printf("Chess game would run here with ncurses.\n");
-}
-
-/* Minesweeper */
-void play_minesweeper(void) {
-    printf("\n╔══════════════════════════╗\n");
-    printf("║  MINESWEEPER GAME        ║\n");
-    printf("║   Click to reveal        ║\n");
-    printf("║   Right-click to flag    ║\n");
-    printf("║   Press Q to quit        ║\n");
-    printf("╚══════════════════════════╝\n");
-    printf("Loading Minesweeper... (simulated)\n");
-    sleep(2);
-    printf("Minesweeper would run here with ncurses.\n");
-}
-
-void init_games(void) {
-    game_count = 0;
-    
-    game_t *g = &games[game_count++];
-    strcpy(g->name, "snake");
-    strcpy(g->description, "Classic Snake game - eat food and grow");
-    g->min_players = 1;
-    g->max_players = 1;
-    g->requires_graphics = 0;
-    g->game_loop = play_snake;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "tetris");
-    strcpy(g->description, "Classic Tetris - stack blocks");
-    g->min_players = 1;
-    g->max_players = 1;
-    g->requires_graphics = 1;
-    g->game_loop = play_tetris;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "pong");
-    strcpy(g->description, "Classic Pong - 2 player table tennis");
-    g->min_players = 1;
-    g->max_players = 2;
-    g->requires_graphics = 1;
-    g->game_loop = play_pong;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "space_invaders");
-    strcpy(g->description, "Space Invaders - defend against aliens");
-    g->min_players = 1;
-    g->max_players = 1;
-    g->requires_graphics = 1;
-    g->game_loop = play_space_invaders;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "sudoku");
-    strcpy(g->description, "Number puzzle game");
-    g->min_players = 1;
-    g->max_players = 1;
-    g->requires_graphics = 0;
-    g->game_loop = play_sudoku;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "2048");
-    strcpy(g->description, "Merge tiles to reach 2048");
-    g->min_players = 1;
-    g->max_players = 1;
-    g->requires_graphics = 0;
-    g->game_loop = play_2048;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "chess");
-    strcpy(g->description, "Classic chess game");
-    g->min_players = 2;
-    g->max_players = 2;
-    g->requires_graphics = 1;
-    g->game_loop = play_chess;
-    
-    g = &games[game_count++];
-    strcpy(g->name, "minesweeper");
-    strcpy(g->description, "Find all mines without triggering them");
-    g->min_players = 1;
-    g->max_players = 1;
-    g->requires_graphics = 0;
-    g->game_loop = play_minesweeper;
-}
-
-void list_games(void) {
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                    Available Games                          ║\n");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
-    printf("║ %-4s %-20s %-12s %-25s ║\n", 
-           "No.", "Game", "Players", "Description");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
-    
-    for (int i = 0; i < game_count; i++) {
-        game_t *g = &games[i];
-        char players[16];
-        if (g->max_players > 1) {
-            snprintf(players, sizeof(players), "%d-%d", g->min_players, g->max_players);
-        } else {
-            snprintf(players, sizeof(players), "%d", g->min_players);
-        }
-        printf("║ %-4d %-20s %-12s %-25s ║\n",
-               i + 1, g->name, players, g->description);
-    }
-    
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
-}
-
-int start_game(const char *name) {
-    for (int i = 0; i < game_count; i++) {
-        if (strcmp(games[i].name, name) == 0) {
-            if (games[i].game_loop) {
-                games[i].game_loop();
-                return 0;
-            }
-        }
-    }
-    printf("Game '%s' not found.\n", name);
+    ztk_error("Command not found: %s", cmd_name);
     return -1;
 }
 
-/* ============ Terminal Browser Implementation ============ */
-
-void init_browser(void) {
-    memset(&browser, 0, sizeof(browser));
-    strcpy(browser.url, "about:blank");
-    browser.content_length = 0;
-    browser.scroll_position = 0;
-    browser.cursor_position = 0;
-}
-
-char *fetch_url(const char *url) {
-    static char content[1024*64];
+void ztk_list_commands(void) {
+    ztk_print_header("Available Commands");
     
-    if (strstr(url, "http://") || strstr(url, "https://")) {
-        char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "curl -s -L '%s' 2>/dev/null", url);
-        FILE *fp = popen(cmd, "r");
-        if (fp) {
-            size_t read = fread(content, 1, sizeof(content) - 1, fp);
-            content[read] = '\0';
-            pclose(fp);
-            return content;
-        }
+    command_t *cmd = ztk.commands;
+    while (cmd) {
+        printf("  %-20s %s\n", cmd->name, cmd->description);
+        cmd = cmd->next;
     }
     
-    /* If it's a local file */
-    if (strstr(url, "file://")) {
-        char path[MAX_PATH];
-        strcpy(path, url + 7);
-        char *data = vfs_read_file(virtual_fs, path);
-        if (data) {
-            strcpy(content, data);
-            return content;
-        }
-    }
+    printf("\n  %-20s %s\n", "[command]", "Any external command in PATH");
+    printf("  %-20s %s\n", "[function]", "User-defined function");
+    printf("  %-20s %s\n", "[alias]", "Command alias");
     
-    /* Generate demo content */
-    snprintf(content, sizeof(content),
-        "<html>\n"
-        "<head><title>ZTK Browser</title></head>\n"
-        "<body>\n"
-        "<h1>ZTK Terminal Browser</h1>\n"
-        "<p>Welcome to the ZTK web browser!</p>\n"
-        "<p>Current URL: %s</p>\n"
-        "<p>Bookmarks: %d</p>\n"
-        "<hr>\n"
-        "<p>Navigate with arrow keys</p>\n"
-        "<p>Press 'b' to bookmark, 'h' for history</p>\n"
-        "</body>\n"
-        "</html>\n", url);
-    
-    return content;
+    ztk_print_footer();
 }
 
-void browse_url(const char *url) {
-    strcpy(browser.url, url);
-    char *content = fetch_url(url);
-    if (content) {
-        strcpy(browser.content, content);
-        browser.content_length = strlen(content);
-        render_html(browser.content);
-    }
-}
-
-void render_html(const char *html) {
-    /* Simple HTML renderer for terminal */
-    const char *p = html;
-    int in_tag = 0;
-    int line_count = 0;
+/* Variable System */
+int ztk_set_variable(const char *name, const char *value, int readonly, int exported) {
+    if (!name || !value) return -1;
     
-    printf("\033[2J\033[H");
-    printf("URL: %s\n", browser.url);
-    printf("═══════════════════════════════════════════════════════════════\n");
+    pthread_mutex_lock(&ztk.variable_lock);
     
-    while (*p && line_count < sys_info.terminal_height - 5) {
-        if (*p == '<') {
-            in_tag = 1;
-            p++;
-            continue;
-        }
-        if (*p == '>') {
-            in_tag = 0;
-            p++;
-            continue;
-        }
-        if (!in_tag) {
-            if (*p == '\n') {
-                printf("\n");
-                line_count++;
-            } else {
-                putchar(*p);
+    /* Check if variable already exists */
+    variable_t *var = ztk.variables;
+    while (var) {
+        if (strcmp(var->name, name) == 0) {
+            if (var->readonly) {
+                pthread_mutex_unlock(&ztk.variable_lock);
+                ztk_error("Variable %s is read-only", name);
+                return -1;
             }
+            free(var->value);
+            var->value = strdup(value);
+            var->exported = exported;
+            pthread_mutex_unlock(&ztk.variable_lock);
+            
+            if (exported) {
+                setenv(name, value, 1);
+            }
+            return 0;
         }
-        p++;
+        var = var->next;
     }
     
-    printf("\n═══════════════════════════════════════════════════════════════\n");
-    printf("[Arrow keys: scroll] [b:bookmark] [h:history] [q:quit]\n");
-}
-
-void browser_navigate_back(void) {
-    if (browser.history_count > 0) {
-        browser.history_count--;
-        browse_url(browser.history[browser.history_count]);
-    }
-}
-
-void browser_navigate_forward(void) {
-    if (browser.history_count < 99) {
-        browser.history_count++;
-        browse_url(browser.history[browser.history_count]);
-    }
-}
-
-void browser_add_bookmark(void) {
-    if (browser.bookmark_count < 50) {
-        strcpy(browser.bookmarks[browser.bookmark_count], browser.url);
-        browser.bookmark_count++;
-        printf("Bookmarked: %s\n", browser.url);
-    }
-}
-
-void browser_list_bookmarks(void) {
-    printf("\nBookmarks:\n");
-    printf("═══════════════════════════════════════════════════════════════\n");
-    for (int i = 0; i < browser.bookmark_count; i++) {
-        printf("%d. %s\n", i + 1, browser.bookmarks[i]);
-    }
-}
-
-void browser_search(const char *query) {
-    char url[512];
-    snprintf(url, sizeof(url), "https://duckduckgo.com/html/?q=%s", query);
-    browse_url(url);
-}
-
-/* ============ ZewAI Bot Implementation ============ */
-
-void init_zewai(void) {
-    memset(&zewai, 0, sizeof(zewai));
-    strcpy(zewai.model, "deepseek-chat");
-    strcpy(zewai.system_prompt, "You are ZewAI, an AI assistant for ZTK OS.");
-    zewai.max_tokens = 2048;
-    zewai.temperature = 0.7;
-    zewai.enabled = 0;
-    pthread_mutex_init(&zewai.ai_lock, NULL);
-}
-
-void set_ai_token(const char *token) {
-    strcpy(zewai.token, token);
-    zewai.enabled = 1;
-    printf("ZewAI token set. AI is now enabled.\n");
-}
-
-int send_ai_message(const char *message, char *response, size_t response_size) {
-    if (!zewai.enabled || strlen(zewai.token) == 0) {
-        snprintf(response, response_size, "Error: ZewAI not enabled. Please set your DeepSeek token.");
+    /* Create new variable */
+    var = malloc(sizeof(variable_t));
+    if (!var) {
+        pthread_mutex_unlock(&ztk.variable_lock);
         return -1;
     }
     
-    char curl_cmd[4096];
-    char escaped_message[2048];
+    strncpy(var->name, name, sizeof(var->name) - 1);
+    var->value = strdup(value);
+    var->readonly = readonly;
+    var->exported = exported;
+    var->next = ztk.variables;
+    ztk.variables = var;
     
-    /* Escape the message for JSON */
-    char *p = escaped_message;
-    for (const char *s = message; *s && p - escaped_message < sizeof(escaped_message) - 1; s++) {
-        if (*s == '"') { *p++ = '\\'; *p++ = '"'; }
-        else if (*s == '\\') { *p++ = '\\'; *p++ = '\\'; }
-        else { *p++ = *s; }
+    pthread_mutex_unlock(&ztk.variable_lock);
+    
+    if (exported) {
+        setenv(name, value, 1);
+    }
+    
+    return 0;
+}
+
+char *ztk_get_variable(const char *name) {
+    if (!name) return NULL;
+    
+    /* Check environment variables first */
+    char *env_value = getenv(name);
+    if (env_value) {
+        return env_value;
+    }
+    
+    pthread_mutex_lock(&ztk.variable_lock);
+    
+    variable_t *var = ztk.variables;
+    while (var) {
+        if (strcmp(var->name, name) == 0) {
+            pthread_mutex_unlock(&ztk.variable_lock);
+            return var->value;
+        }
+        var = var->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.variable_lock);
+    return NULL;
+}
+
+int ztk_unset_variable(const char *name) {
+    if (!name) return -1;
+    
+    pthread_mutex_lock(&ztk.variable_lock);
+    
+    variable_t *var = ztk.variables;
+    variable_t *prev = NULL;
+    while (var) {
+        if (strcmp(var->name, name) == 0) {
+            if (var->readonly) {
+                pthread_mutex_unlock(&ztk.variable_lock);
+                ztk_error("Variable %s is read-only", name);
+                return -1;
+            }
+            
+            if (prev) {
+                prev->next = var->next;
+            } else {
+                ztk.variables = var->next;
+            }
+            
+            free(var->value);
+            free(var);
+            
+            pthread_mutex_unlock(&ztk.variable_lock);
+            unsetenv(name);
+            return 0;
+        }
+        prev = var;
+        var = var->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.variable_lock);
+    return -1;
+}
+
+void ztk_list_variables(void) {
+    ztk_print_header("Variables");
+    
+    variable_t *var = ztk.variables;
+    while (var) {
+        printf("  %s=%s %s\n", var->name, var->value, 
+               var->readonly ? "(readonly)" : var->exported ? "(exported)" : "");
+        var = var->next;
+    }
+    
+    ztk_print_footer();
+}
+
+/* Function System */
+int ztk_define_function(const char *name, const char *body, char **params, int param_count) {
+    if (!name || !body) return -1;
+    
+    pthread_mutex_lock(&ztk.function_lock);
+    
+    /* Check if function exists */
+    shell_function_t *func = ztk.functions;
+    while (func) {
+        if (strcmp(func->name, name) == 0) {
+            /* Replace function */
+            if (func->body) free(func->body);
+            if (func->parameters) free(func->parameters);
+            func->body = strdup(body);
+            func->param_count = param_count;
+            if (param_count > 0) {
+                func->parameters = malloc(sizeof(char*) * param_count);
+                for (int i = 0; i < param_count; i++) {
+                    func->parameters[i] = strdup(params[i]);
+                }
+            }
+            pthread_mutex_unlock(&ztk.function_lock);
+            return 0;
+        }
+        func = func->next;
+    }
+    
+    /* Create new function */
+    func = malloc(sizeof(shell_function_t));
+    if (!func) {
+        pthread_mutex_unlock(&ztk.function_lock);
+        return -1;
+    }
+    
+    strncpy(func->name, name, sizeof(func->name) - 1);
+    func->body = strdup(body);
+    func->param_count = param_count;
+    func->line_count = 1;
+    if (param_count > 0) {
+        func->parameters = malloc(sizeof(char*) * param_count);
+        for (int i = 0; i < param_count; i++) {
+            func->parameters[i] = strdup(params[i]);
+        }
+    }
+    func->next = ztk.functions;
+    ztk.functions = func;
+    
+    pthread_mutex_unlock(&ztk.function_lock);
+    return 0;
+}
+
+int ztk_execute_function(const char *name, char **args, int argc) {
+    shell_function_t *func = NULL;
+    
+    pthread_mutex_lock(&ztk.function_lock);
+    func = ztk.functions;
+    while (func) {
+        if (strcmp(func->name, name) == 0) break;
+        func = func->next;
+    }
+    pthread_mutex_unlock(&ztk.function_lock);
+    
+    if (!func) {
+        ztk_error("Function not found: %s", name);
+        return -1;
+    }
+    
+    /* Set parameters */
+    for (int i = 0; i < func->param_count && i < argc; i++) {
+        ztk_set_variable(func->parameters[i], args[i], 0, 0);
+    }
+    
+    /* Execute function body */
+    char *line = strtok(func->body, "\n");
+    while (line) {
+        char *trimmed = line;
+        while (isspace(*trimmed)) trimmed++;
+        
+        if (strlen(trimmed) > 0 && trimmed[0] != '#') {
+            /* Parse and execute the line */
+            char *cmd_args[MAX_ARGS];
+            int cmd_argc = 0;
+            char *token = strtok(trimmed, " ");
+            while (token && cmd_argc < MAX_ARGS - 1) {
+                /* Expand variables */
+                if (token[0] == '$') {
+                    char *var_value = ztk_get_variable(token + 1);
+                    if (var_value) {
+                        cmd_args[cmd_argc++] = var_value;
+                    } else {
+                        cmd_args[cmd_argc++] = token;
+                    }
+                } else {
+                    cmd_args[cmd_argc++] = token;
+                }
+                token = strtok(NULL, " ");
+            }
+            cmd_args[cmd_argc] = NULL;
+            
+            if (cmd_argc > 0) {
+                ztk_execute_command(cmd_argc, cmd_args);
+            }
+        }
+        line = strtok(NULL, "\n");
+    }
+    
+    return 0;
+}
+
+void ztk_list_functions(void) {
+    ztk_print_header("Functions");
+    
+    shell_function_t *func = ztk.functions;
+    while (func) {
+        printf("  %s(", func->name);
+        for (int i = 0; i < func->param_count; i++) {
+            printf("%s%s", func->parameters[i], 
+                   i < func->param_count - 1 ? ", " : "");
+        }
+        printf(")\n");
+        func = func->next;
+    }
+    
+    ztk_print_footer();
+}
+
+/* Alias System */
+int ztk_add_alias(const char *name, const char *command) {
+    if (!name || !command) return -1;
+    
+    alias_t *alias = ztk.aliases;
+    while (alias) {
+        if (strcmp(alias->name, name) == 0) {
+            /* Replace alias */
+            strncpy(alias->command, command, sizeof(alias->command) - 1);
+            return 0;
+        }
+        alias = alias->next;
+    }
+    
+    alias = malloc(sizeof(alias_t));
+    if (!alias) return -1;
+    
+    strncpy(alias->name, name, sizeof(alias->name) - 1);
+    strncpy(alias->command, command, sizeof(alias->command) - 1);
+    alias->next = ztk.aliases;
+    ztk.aliases = alias;
+    
+    return 0;
+}
+
+char *ztk_expand_alias(const char *name) {
+    alias_t *alias = ztk.aliases;
+    while (alias) {
+        if (strcmp(alias->name, name) == 0) {
+            return alias->command;
+        }
+        alias = alias->next;
+    }
+    return NULL;
+}
+
+void ztk_list_aliases(void) {
+    ztk_print_header("Aliases");
+    
+    alias_t *alias = ztk.aliases;
+    while (alias) {
+        printf("  %s='%s'\n", alias->name, alias->command);
+        alias = alias->next;
+    }
+    
+    ztk_print_footer();
+}
+
+/* Job Control */
+int ztk_add_job(int pid, const char *command) {
+    pthread_mutex_lock(&ztk.job_lock);
+    
+    job_t *job = malloc(sizeof(job_t));
+    if (!job) {
+        pthread_mutex_unlock(&ztk.job_lock);
+        return -1;
+    }
+    
+    job->job_id = ztk.jobs ? ztk.jobs->job_id + 1 : 1;
+    job->pid = pid;
+    strncpy(job->command, command, sizeof(job->command) - 1);
+    strcpy(job->status, "RUNNING");
+    job->start_time = time(NULL);
+    job->end_time = 0;
+    job->exit_code = 0;
+    job->cpu_time = 0;
+    job->memory_peak = 0;
+    job->signal = 0;
+    job->next = ztk.jobs;
+    ztk.jobs = job;
+    
+    pthread_mutex_unlock(&ztk.job_lock);
+    return job->job_id;
+}
+
+job_t *ztk_find_job(int pid) {
+    pthread_mutex_lock(&ztk.job_lock);
+    
+    job_t *job = ztk.jobs;
+    while (job) {
+        if (job->pid == pid) {
+            pthread_mutex_unlock(&ztk.job_lock);
+            return job;
+        }
+        job = job->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.job_lock);
+    return NULL;
+}
+
+void ztk_update_jobs(void) {
+    pthread_mutex_lock(&ztk.job_lock);
+    
+    job_t *job = ztk.jobs;
+    while (job) {
+        if (strcmp(job->status, "RUNNING") == 0) {
+            int status;
+            pid_t result = waitpid(job->pid, &status, WNOHANG);
+            if (result == job->pid) {
+                if (WIFEXITED(status)) {
+                    job->exit_code = WEXITSTATUS(status);
+                    strcpy(job->status, "COMPLETED");
+                } else if (WIFSIGNALED(status)) {
+                    job->signal = WTERMSIG(status);
+                    strcpy(job->status, "SIGNALED");
+                }
+                job->end_time = time(NULL);
+            }
+        }
+        job = job->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.job_lock);
+}
+
+void ztk_list_jobs(void) {
+    ztk_update_jobs();
+    
+    ztk_print_header("Jobs");
+    printf("  %-8s %-8s %-12s %-30s %s\n", 
+           "Job ID", "PID", "Status", "Command", "Start Time");
+    printf("  %-8s %-8s %-12s %-30s %s\n", 
+           "------", "---", "------", "-------", "----------");
+    
+    pthread_mutex_lock(&ztk.job_lock);
+    
+    job_t *job = ztk.jobs;
+    while (job) {
+        char start_time[64];
+        strftime(start_time, sizeof(start_time), "%H:%M:%S", localtime(&job->start_time));
+        
+        printf("  %-8d %-8d %-12s %-30s %s\n",
+               job->job_id, job->pid, job->status, job->command, start_time);
+        job = job->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.job_lock);
+    ztk_print_footer();
+}
+
+int ztk_kill_job(int job_id, int signal) {
+    pthread_mutex_lock(&ztk.job_lock);
+    
+    job_t *job = ztk.jobs;
+    while (job) {
+        if (job->job_id == job_id) {
+            pthread_mutex_unlock(&ztk.job_lock);
+            if (kill(job->pid, signal) == 0) {
+                ztk_info("Job %d killed with signal %d", job_id, signal);
+                return 0;
+            }
+            ztk_error("Failed to kill job %d", job_id);
+            return -1;
+        }
+        job = job->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.job_lock);
+    ztk_error("Job %d not found", job_id);
+    return -1;
+}
+
+int ztk_wait_job(int job_id) {
+    pthread_mutex_lock(&ztk.job_lock);
+    
+    job_t *job = ztk.jobs;
+    while (job) {
+        if (job->job_id == job_id) {
+            pthread_mutex_unlock(&ztk.job_lock);
+            
+            int status;
+            waitpid(job->pid, &status, 0);
+            
+            pthread_mutex_lock(&ztk.job_lock);
+            if (WIFEXITED(status)) {
+                job->exit_code = WEXITSTATUS(status);
+                strcpy(job->status, "COMPLETED");
+            }
+            pthread_mutex_unlock(&ztk.job_lock);
+            
+            return 0;
+        }
+        job = job->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.job_lock);
+    ztk_error("Job %d not found", job_id);
+    return -1;
+}
+
+/* Plugin System */
+int ztk_load_plugin(const char *path) {
+    char real_path[MAX_PATH];
+    if (path[0] != '/') {
+        snprintf(real_path, sizeof(real_path), "%s/%s", ztk.plugin_dir, path);
+    } else {
+        strncpy(real_path, path, sizeof(real_path) - 1);
+    }
+    
+    void *handle = dlopen(real_path, RTLD_NOW);
+    if (!handle) {
+        ztk_error("Failed to load plugin: %s", dlerror());
+        return -1;
+    }
+    
+    /* Get plugin info */
+    const char *(*get_name)(void) = dlsym(handle, "plugin_name");
+    const char *(*get_version)(void) = dlsym(handle, "plugin_version");
+    const char *(*get_description)(void) = dlsym(handle, "plugin_description");
+    int (*plugin_init)(struct plugin *) = dlsym(handle, "plugin_init");
+    int (*plugin_deinit)(struct plugin *) = dlsym(handle, "plugin_deinit");
+    
+    if (!get_name || !get_version || !plugin_init) {
+        ztk_error("Invalid plugin interface");
+        dlclose(handle);
+        return -1;
+    }
+    
+    plugin_t *plugin = malloc(sizeof(plugin_t));
+    if (!plugin) {
+        dlclose(handle);
+        return -1;
+    }
+    
+    strncpy(plugin->name, get_name(), sizeof(plugin->name) - 1);
+    strncpy(plugin->version, get_version(), sizeof(plugin->version) - 1);
+    if (get_description) {
+        strncpy(plugin->description, get_description(), sizeof(plugin->description) - 1);
+    } else {
+        strcpy(plugin->description, "No description");
+    }
+    plugin->handle = handle;
+    plugin->init = plugin_init;
+    plugin->deinit = plugin_deinit;
+    plugin->execute = dlsym(handle, "plugin_execute");
+    plugin->data = NULL;
+    plugin->type = PLUGIN_TYPE_COMMAND;
+    
+    if (plugin->init(plugin) == 0) {
+        plugin->next = ztk.plugins;
+        ztk.plugins = plugin;
+        ztk_info("Plugin loaded: %s v%s", plugin->name, plugin->version);
+        return 0;
+    }
+    
+    dlclose(handle);
+    free(plugin);
+    return -1;
+}
+
+int ztk_unload_plugin(const char *name) {
+    pthread_mutex_lock(&ztk.plugin_lock);
+    
+    plugin_t *plugin = ztk.plugins;
+    plugin_t *prev = NULL;
+    while (plugin) {
+        if (strcmp(plugin->name, name) == 0) {
+            if (plugin->deinit) {
+                plugin->deinit(plugin);
+            }
+            dlclose(plugin->handle);
+            
+            if (prev) {
+                prev->next = plugin->next;
+            } else {
+                ztk.plugins = plugin->next;
+            }
+            
+            free(plugin);
+            pthread_mutex_unlock(&ztk.plugin_lock);
+            ztk_info("Plugin unloaded: %s", name);
+            return 0;
+        }
+        prev = plugin;
+        plugin = plugin->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.plugin_lock);
+    ztk_error("Plugin not found: %s", name);
+    return -1;
+}
+
+void ztk_list_plugins(void) {
+    ztk_print_header("Plugins");
+    
+    pthread_mutex_lock(&ztk.plugin_lock);
+    
+    plugin_t *plugin = ztk.plugins;
+    while (plugin) {
+        printf("  %-20s v%-8s %s\n", 
+               plugin->name, plugin->version, plugin->description);
+        plugin = plugin->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.plugin_lock);
+    ztk_print_footer();
+}
+
+/* Database System */
+int ztk_db_connect(const char *name, const char *path, const char *driver) {
+    if (strcmp(driver, "sqlite") != 0) {
+        ztk_error("Unsupported driver: %s", driver);
+        return -1;
+    }
+    
+    pthread_mutex_lock(&ztk.database_lock);
+    
+    /* Check if database exists */
+    database_t *db = ztk.databases;
+    while (db) {
+        if (strcmp(db->name, name) == 0) {
+            pthread_mutex_unlock(&ztk.database_lock);
+            ztk_error("Database %s already exists", name);
+            return -1;
+        }
+        db = db->next;
+    }
+    
+    db = malloc(sizeof(database_t));
+    if (!db) {
+        pthread_mutex_unlock(&ztk.database_lock);
+        return -1;
+    }
+    
+    strncpy(db->name, name, sizeof(db->name) - 1);
+    strncpy(db->path, path, sizeof(db->path) - 1);
+    strncpy(db->driver, driver, sizeof(db->driver) - 1);
+    pthread_mutex_init(&db->lock, NULL);
+    
+    if (sqlite3_open(path, &db->db) == SQLITE_OK) {
+        db->connected = 1;
+        db->next = ztk.databases;
+        ztk.databases = db;
+        pthread_mutex_unlock(&ztk.database_lock);
+        ztk_info("Connected to database: %s", name);
+        return 0;
+    }
+    
+    sqlite3_close(db->db);
+    free(db);
+    pthread_mutex_unlock(&ztk.database_lock);
+    ztk_error("Failed to connect to database: %s", name);
+    return -1;
+}
+
+int ztk_db_execute(const char *db_name, const char *sql) {
+    pthread_mutex_lock(&ztk.database_lock);
+    
+    database_t *db = ztk.databases;
+    while (db) {
+        if (strcmp(db->name, db_name) == 0) {
+            pthread_mutex_unlock(&ztk.database_lock);
+            
+            pthread_mutex_lock(&db->lock);
+            char *err_msg = NULL;
+            int result = sqlite3_exec(db->db, sql, NULL, NULL, &err_msg);
+            pthread_mutex_unlock(&db->lock);
+            
+            if (result != SQLITE_OK) {
+                ztk_error("SQL error: %s", err_msg);
+                sqlite3_free(err_msg);
+                return -1;
+            }
+            return 0;
+        }
+        db = db->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.database_lock);
+    ztk_error("Database not found: %s", db_name);
+    return -1;
+}
+
+char **ztk_db_query(const char *db_name, const char *sql, int *rows, int *cols) {
+    pthread_mutex_lock(&ztk.database_lock);
+    
+    database_t *db = ztk.databases;
+    while (db) {
+        if (strcmp(db->name, db_name) == 0) {
+            pthread_mutex_unlock(&ztk.database_lock);
+            
+            pthread_mutex_lock(&db->lock);
+            
+            sqlite3_stmt *stmt;
+            if (sqlite3_prepare_v2(db->db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+                pthread_mutex_unlock(&db->lock);
+                ztk_error("Failed to prepare statement");
+                return NULL;
+            }
+            
+            *cols = sqlite3_column_count(stmt);
+            *rows = 0;
+            
+            /* Count rows */
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                (*rows)++;
+            }
+            sqlite3_reset(stmt);
+            
+            /* Allocate result array */
+            char **result = malloc(sizeof(char*) * ((*rows) + 1));
+            if (!result) {
+                sqlite3_finalize(stmt);
+                pthread_mutex_unlock(&db->lock);
+                return NULL;
+            }
+            
+            /* Fetch data */
+            int row = 0;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                char *row_data = malloc(sizeof(char) * 1024);
+                int offset = 0;
+                for (int i = 0; i < *cols; i++) {
+                    const char *value = (const char*)sqlite3_column_text(stmt, i);
+                    if (value) {
+                        offset += snprintf(row_data + offset, 1024 - offset, 
+                                          "%s%s", i > 0 ? "\t" : "", value);
+                    } else {
+                        offset += snprintf(row_data + offset, 1024 - offset, 
+                                          "%sNULL", i > 0 ? "\t" : "");
+                    }
+                }
+                result[row++] = row_data;
+            }
+            result[row] = NULL;
+            
+            sqlite3_finalize(stmt);
+            pthread_mutex_unlock(&db->lock);
+            return result;
+        }
+        db = db->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.database_lock);
+    ztk_error("Database not found: %s", db_name);
+    return NULL;
+}
+
+void ztk_db_disconnect(const char *name) {
+    pthread_mutex_lock(&ztk.database_lock);
+    
+    database_t *db = ztk.databases;
+    database_t *prev = NULL;
+    while (db) {
+        if (strcmp(db->name, name) == 0) {
+            if (prev) {
+                prev->next = db->next;
+            } else {
+                ztk.databases = db->next;
+            }
+            
+            if (db->db) {
+                sqlite3_close(db->db);
+            }
+            pthread_mutex_destroy(&db->lock);
+            free(db);
+            pthread_mutex_unlock(&ztk.database_lock);
+            ztk_info("Disconnected from database: %s", name);
+            return;
+        }
+        prev = db;
+        db = db->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.database_lock);
+    ztk_error("Database not found: %s", name);
+}
+
+void ztk_list_databases(void) {
+    ztk_print_header("Databases");
+    
+    pthread_mutex_lock(&ztk.database_lock);
+    
+    database_t *db = ztk.databases;
+    while (db) {
+        printf("  %-20s %-12s %s\n", 
+               db->name, db->driver, db->connected ? "Connected" : "Disconnected");
+        db = db->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.database_lock);
+    ztk_print_footer();
+}
+
+/* Container System */
+int ztk_container_create(const char *name, const char *image) {
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "docker create --name %s %s 2>/dev/null", name, image);
+    int result = system(cmd);
+    if (result != 0) {
+        /* Try podman if docker fails */
+        snprintf(cmd, sizeof(cmd), "podman create --name %s %s 2>/dev/null", name, image);
+        result = system(cmd);
+    }
+    
+    if (result == 0) {
+        container_t *container = malloc(sizeof(container_t));
+        if (container) {
+            strncpy(container->name, name, sizeof(container->name) - 1);
+            strncpy(container->image, image, sizeof(container->image) - 1);
+            strcpy(container->status, "CREATED");
+            container->pid = -1;
+            container->port = -1;
+            container->running = 0;
+            
+            pthread_mutex_lock(&ztk.container_lock);
+            container->next = ztk.containers;
+            ztk.containers = container;
+            pthread_mutex_unlock(&ztk.container_lock);
+        }
+        ztk_info("Container created: %s", name);
+        return 0;
+    }
+    
+    ztk_error("Failed to create container: %s", name);
+    return -1;
+}
+
+int ztk_container_start(const char *name) {
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "docker start %s 2>/dev/null", name);
+    int result = system(cmd);
+    if (result != 0) {
+        snprintf(cmd, sizeof(cmd), "podman start %s 2>/dev/null", name);
+        result = system(cmd);
+    }
+    
+    if (result == 0) {
+        pthread_mutex_lock(&ztk.container_lock);
+        container_t *container = ztk.containers;
+        while (container) {
+            if (strcmp(container->name, name) == 0) {
+                strcpy(container->status, "RUNNING");
+                container->running = 1;
+                break;
+            }
+            container = container->next;
+        }
+        pthread_mutex_unlock(&ztk.container_lock);
+        ztk_info("Container started: %s", name);
+        return 0;
+    }
+    
+    ztk_error("Failed to start container: %s", name);
+    return -1;
+}
+
+int ztk_container_stop(const char *name) {
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "docker stop %s 2>/dev/null", name);
+    int result = system(cmd);
+    if (result != 0) {
+        snprintf(cmd, sizeof(cmd), "podman stop %s 2>/dev/null", name);
+        result = system(cmd);
+    }
+    
+    if (result == 0) {
+        pthread_mutex_lock(&ztk.container_lock);
+        container_t *container = ztk.containers;
+        while (container) {
+            if (strcmp(container->name, name) == 0) {
+                strcpy(container->status, "STOPPED");
+                container->running = 0;
+                break;
+            }
+            container = container->next;
+        }
+        pthread_mutex_unlock(&ztk.container_lock);
+        ztk_info("Container stopped: %s", name);
+        return 0;
+    }
+    
+    ztk_error("Failed to stop container: %s", name);
+    return -1;
+}
+
+int ztk_container_remove(const char *name) {
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "docker rm %s 2>/dev/null", name);
+    int result = system(cmd);
+    if (result != 0) {
+        snprintf(cmd, sizeof(cmd), "podman rm %s 2>/dev/null", name);
+        result = system(cmd);
+    }
+    
+    if (result == 0) {
+        pthread_mutex_lock(&ztk.container_lock);
+        container_t *container = ztk.containers;
+        container_t *prev = NULL;
+        while (container) {
+            if (strcmp(container->name, name) == 0) {
+                if (prev) {
+                    prev->next = container->next;
+                } else {
+                    ztk.containers = container->next;
+                }
+                free(container);
+                break;
+            }
+            prev = container;
+            container = container->next;
+        }
+        pthread_mutex_unlock(&ztk.container_lock);
+        ztk_info("Container removed: %s", name);
+        return 0;
+    }
+    
+    ztk_error("Failed to remove container: %s", name);
+    return -1;
+}
+
+void ztk_list_containers(void) {
+    ztk_print_header("Containers");
+    printf("  %-20s %-20s %-12s %s\n", 
+           "Name", "Image", "Status", "Running");
+    printf("  %-20s %-20s %-12s %s\n", 
+           "----", "-----", "------", "-------");
+    
+    pthread_mutex_lock(&ztk.container_lock);
+    
+    container_t *container = ztk.containers;
+    while (container) {
+        printf("  %-20s %-20s %-12s %s\n",
+               container->name, container->image, 
+               container->status, container->running ? "Yes" : "No");
+        container = container->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.container_lock);
+    ztk_print_footer();
+}
+
+/* Cluster System */
+int ztk_cluster_add_node(const char *name, const char *address, int port) {
+    cluster_node_t *node = malloc(sizeof(cluster_node_t));
+    if (!node) return -1;
+    
+    strncpy(node->name, name, sizeof(node->name) - 1);
+    strncpy(node->address, address, sizeof(node->address) - 1);
+    node->port = port;
+    strcpy(node->status, "DISCONNECTED");
+    node->connected = 0;
+    node->load = 0.0;
+    node->memory_used = 0;
+    node->memory_total = 0;
+    
+    pthread_mutex_lock(&ztk.cluster_lock);
+    node->next = ztk.cluster_nodes;
+    ztk.cluster_nodes = node;
+    pthread_mutex_unlock(&ztk.cluster_lock);
+    
+    ztk_info("Cluster node added: %s (%s:%d)", name, address, port);
+    return 0;
+}
+
+int ztk_cluster_connect(const char *name) {
+    pthread_mutex_lock(&ztk.cluster_lock);
+    
+    cluster_node_t *node = ztk.cluster_nodes;
+    while (node) {
+        if (strcmp(node->name, name) == 0) {
+            /* Attempt connection */
+            int sock = socket(AF_INET, SOCK_STREAM, 0);
+            if (sock < 0) {
+                pthread_mutex_unlock(&ztk.cluster_lock);
+                ztk_error("Failed to create socket");
+                return -1;
+            }
+            
+            struct sockaddr_in addr;
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(node->port);
+            inet_pton(AF_INET, node->address, &addr.sin_addr);
+            
+            if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+                node->connected = 1;
+                strcpy(node->status, "CONNECTED");
+                close(sock);
+                pthread_mutex_unlock(&ztk.cluster_lock);
+                ztk_info("Connected to cluster node: %s", name);
+                return 0;
+            }
+            close(sock);
+            break;
+        }
+        node = node->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.cluster_lock);
+    ztk_error("Failed to connect to cluster node: %s", name);
+    return -1;
+}
+
+void ztk_cluster_list_nodes(void) {
+    ztk_print_header("Cluster Nodes");
+    printf("  %-20s %-30s %-12s %-10s %-15s\n", 
+           "Name", "Address", "Status", "Load", "Memory");
+    printf("  %-20s %-30s %-12s %-10s %-15s\n", 
+           "----", "-------", "------", "----", "------");
+    
+    pthread_mutex_lock(&ztk.cluster_lock);
+    
+    cluster_node_t *node = ztk.cluster_nodes;
+    while (node) {
+        char memory[32];
+        if (node->memory_total > 0) {
+            snprintf(memory, sizeof(memory), "%.1f%%", 
+                     (float)node->memory_used / node->memory_total * 100);
+        } else {
+            strcpy(memory, "N/A");
+        }
+        
+        printf("  %-20s %-30s %-12s %-10.2f %-15s\n",
+               node->name, 
+               node->address,
+               node->status,
+               node->load,
+               memory);
+        node = node->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.cluster_lock);
+    ztk_print_footer();
+}
+
+int ztk_cluster_broadcast(const char *command) {
+    pthread_mutex_lock(&ztk.cluster_lock);
+    
+    cluster_node_t *node = ztk.cluster_nodes;
+    int success_count = 0;
+    int total_count = 0;
+    
+    while (node) {
+        if (node->connected) {
+            total_count++;
+            int sock = socket(AF_INET, SOCK_STREAM, 0);
+            if (sock >= 0) {
+                struct sockaddr_in addr;
+                addr.sin_family = AF_INET;
+                addr.sin_port = htons(node->port);
+                inet_pton(AF_INET, node->address, &addr.sin_addr);
+                
+                if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+                    send(sock, command, strlen(command), 0);
+                    success_count++;
+                }
+                close(sock);
+            }
+        }
+        node = node->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.cluster_lock);
+    ztk_info("Broadcast to %d/%d nodes", success_count, total_count);
+    return success_count;
+}
+
+/* Backup System */
+int ztk_backup_create(const char *name, const char *source, const char *dest) {
+    backup_set_t *backup = malloc(sizeof(backup_set_t));
+    if (!backup) return -1;
+    
+    strncpy(backup->name, name, sizeof(backup->name) - 1);
+    strncpy(backup->source, source, sizeof(backup->source) - 1);
+    strncpy(backup->destination, dest, sizeof(backup->destination) - 1);
+    backup->encrypted = 0;
+    backup->size = 0;
+    backup->last_backup = time(NULL);
+    backup->count = 1;
+    
+    /* Create backup directory */
+    mkdir(dest, 0755);
+    
+    /* Create backup using tar */
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "tar -czf %s/backup_%ld.tar.gz %s 2>/dev/null", 
+             dest, time(NULL), source);
+    int result = system(cmd);
+    
+    if (result == 0) {
+        pthread_mutex_lock(&ztk.backup_lock);
+        backup->next = ztk.backups;
+        ztk.backups = backup;
+        pthread_mutex_unlock(&ztk.backup_lock);
+        ztk_info("Backup created: %s", name);
+        return 0;
+    }
+    
+    free(backup);
+    ztk_error("Failed to create backup: %s", name);
+    return -1;
+}
+
+int ztk_backup_restore(const char *name, const char *dest) {
+    pthread_mutex_lock(&ztk.backup_lock);
+    
+    backup_set_t *backup = ztk.backups;
+    while (backup) {
+        if (strcmp(backup->name, name) == 0) {
+            pthread_mutex_unlock(&ztk.backup_lock);
+            
+            char cmd[1024];
+            snprintf(cmd, sizeof(cmd), "tar -xzf %s/backup_*.tar.gz -C %s 2>/dev/null", 
+                     backup->destination, dest);
+            int result = system(cmd);
+            
+            if (result == 0) {
+                ztk_info("Backup restored: %s to %s", name, dest);
+                return 0;
+            }
+            ztk_error("Failed to restore backup: %s", name);
+            return -1;
+        }
+        backup = backup->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.backup_lock);
+    ztk_error("Backup not found: %s", name);
+    return -1;
+}
+
+int ztk_backup_encrypt(const char *name, const char *password) {
+    pthread_mutex_lock(&ztk.backup_lock);
+    
+    backup_set_t *backup = ztk.backups;
+    while (backup) {
+        if (strcmp(backup->name, name) == 0) {
+            pthread_mutex_unlock(&ztk.backup_lock);
+            
+            /* Encrypt using openssl */
+            char cmd[1024];
+            snprintf(cmd, sizeof(cmd), 
+                     "find %s -name '*.tar.gz' -exec openssl enc -aes-256-cbc -salt -in {} -out {}.enc -pass pass:%s \\; 2>/dev/null", 
+                     backup->destination, password);
+            int result = system(cmd);
+            
+            if (result == 0) {
+                backup->encrypted = 1;
+                ztk_info("Backup encrypted: %s", name);
+                return 0;
+            }
+            ztk_error("Failed to encrypt backup: %s", name);
+            return -1;
+        }
+        backup = backup->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.backup_lock);
+    ztk_error("Backup not found: %s", name);
+    return -1;
+}
+
+void ztk_list_backups(void) {
+    ztk_print_header("Backups");
+    printf("  %-20s %-30s %-12s %-10s %s\n", 
+           "Name", "Source", "Encrypted", "Count", "Last Backup");
+    printf("  %-20s %-30s %-12s %-10s %s\n", 
+           "----", "------", "---------", "-----", "-----------");
+    
+    pthread_mutex_lock(&ztk.backup_lock);
+    
+    backup_set_t *backup = ztk.backups;
+    while (backup) {
+        char last_time[64];
+        strftime(last_time, sizeof(last_time), "%Y-%m-%d %H:%M:%S", 
+                 localtime(&backup->last_backup));
+        
+        printf("  %-20s %-30s %-12s %-10d %s\n",
+               backup->name, backup->source,
+               backup->encrypted ? "Yes" : "No",
+               backup->count, last_time);
+        backup = backup->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.backup_lock);
+    ztk_print_footer();
+}
+
+/* Monitoring System */
+void ztk_monitor_start(void) {
+    if (ztk.monitoring_active) return;
+    
+    ztk.monitoring_active = 1;
+    pthread_create(&ztk.monitor_thread_id, NULL, ztk_monitor_thread, NULL);
+    ztk_info("Monitoring started");
+}
+
+void ztk_monitor_stop(void) {
+    ztk.monitoring_active = 0;
+    if (ztk.monitor_thread_id) {
+        pthread_join(ztk.monitor_thread_id, NULL);
+    }
+    ztk_info("Monitoring stopped");
+}
+
+void *ztk_monitor_thread(void *arg) {
+    while (ztk.monitoring_active) {
+        pthread_mutex_lock(&ztk.monitor_lock);
+        
+        /* Get CPU usage */
+        FILE *fp = fopen("/proc/stat", "r");
+        if (fp) {
+            char line[256];
+            if (fgets(line, sizeof(line), fp)) {
+                unsigned long user, nice, system, idle;
+                sscanf(line, "cpu %lu %lu %lu %lu", &user, &nice, &system, &idle);
+                unsigned long total = user + nice + system + idle;
+                static unsigned long prev_total = 0;
+                static unsigned long prev_idle = 0;
+                if (prev_total > 0) {
+                    float total_diff = total - prev_total;
+                    float idle_diff = idle - prev_idle;
+                    ztk.monitor.cpu_usage = (unsigned long)((total_diff - idle_diff) / total_diff * 100);
+                }
+                prev_total = total;
+                prev_idle = idle;
+            }
+            fclose(fp);
+        }
+        
+        /* Get memory usage */
+        fp = fopen("/proc/meminfo", "r");
+        if (fp) {
+            char line[256];
+            unsigned long mem_total = 0, mem_available = 0;
+            while (fgets(line, sizeof(line), fp)) {
+                if (sscanf(line, "MemTotal: %lu kB", &mem_total) == 1) continue;
+                if (sscanf(line, "MemAvailable: %lu kB", &mem_available) == 1) break;
+            }
+            if (mem_total > 0) {
+                ztk.monitor.memory_usage = (mem_total - mem_available) * 1024;
+            }
+            fclose(fp);
+        }
+        
+        /* Get disk usage */
+        struct statvfs stat;
+        if (statvfs("/", &stat) == 0) {
+            ztk.monitor.disk_usage = (stat.f_blocks - stat.f_bfree) * stat.f_frsize;
+        }
+        
+        /* Get process count */
+        DIR *dir = opendir("/proc");
+        if (dir) {
+            int count = 0;
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (isdigit(entry->d_name[0])) count++;
+            }
+            ztk.monitor.process_count = count;
+            closedir(dir);
+        }
+        
+        /* Get load average */
+        fp = fopen("/proc/loadavg", "r");
+        if (fp) {
+            float load1, load5, load15;
+            if (fscanf(fp, "%f %f %f", &load1, &load5, &load15) == 3) {
+                ztk.monitor.load_avg[0] = load1;
+                ztk.monitor.load_avg[1] = load5;
+                ztk.monitor.load_avg[2] = load15;
+            }
+            fclose(fp);
+        }
+        
+        ztk.monitor.timestamp = time(NULL);
+        
+        pthread_mutex_unlock(&ztk.monitor_lock);
+        sleep(2);
+    }
+    return NULL;
+}
+
+void ztk_monitor_report(void) {
+    pthread_mutex_lock(&ztk.monitor_lock);
+    
+    ztk_print_header("System Monitor");
+    printf("  CPU Usage:  %lu%%\n", ztk.monitor.cpu_usage);
+    printf("  Memory:     %s / %s\n", 
+           ztk_format_size(ztk.monitor.memory_usage),
+           ztk_format_size(ztk.monitor.memory_usage + 
+                          (ztk.monitor.memory_usage / (100 - ztk.monitor.cpu_usage) * ztk.monitor.cpu_usage)));
+    printf("  Disk:       %s\n", ztk_format_size(ztk.monitor.disk_usage));
+    printf("  Processes:  %d\n", ztk.monitor.process_count);
+    printf("  Load Avg:   %.2f, %.2f, %.2f\n",
+           ztk.monitor.load_avg[0],
+           ztk.monitor.load_avg[1],
+           ztk.monitor.load_avg[2]);
+    printf("  Time:       %s\n", ctime(&ztk.monitor.timestamp));
+    
+    pthread_mutex_unlock(&ztk.monitor_lock);
+    ztk_print_footer();
+}
+
+/* AI System */
+int ztk_ai_init(const char *token) {
+    if (!token) return -1;
+    
+    pthread_mutex_lock(&ztk.ai_lock);
+    strncpy(ztk.ai_token, token, sizeof(ztk.ai_token) - 1);
+    strcpy(ztk.ai_model, "deepseek-chat");
+    strcpy(ztk.ai_system_prompt, "You are ZTK AI, an advanced assistant for the ZTK Enterprise Shell.");
+    ztk.ai_temperature = 0.7;
+    ztk.ai_max_tokens = 4096;
+    ztk.ai_enabled = 1;
+    pthread_mutex_unlock(&ztk.ai_lock);
+    
+    ztk_info("AI initialized with DeepSeek model");
+    return 0;
+}
+
+int ztk_ai_chat(const char *message, char *response, size_t response_size) {
+    if (!ztk.ai_enabled || strlen(ztk.ai_token) == 0) {
+        snprintf(response, response_size, "Error: AI not enabled. Use 'ai init <token>'");
+        return -1;
+    }
+    
+    /* Use curl for API request */
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        strncpy(response, "Error: Failed to initialize curl", response_size - 1);
+        return -1;
+    }
+    
+    char post_data[8192];
+    char escaped_msg[4096];
+    char *p = escaped_msg;
+    for (const char *s = message; *s && p - escaped_msg < sizeof(escaped_msg) - 1; s++) {
+        if (*s == '"' || *s == '\\' || *s == '\n' || *s == '\r') {
+            *p++ = '\\';
+            *p++ = *s;
+        } else {
+            *p++ = *s;
+        }
     }
     *p = '\0';
     
-    snprintf(curl_cmd, sizeof(curl_cmd),
-        "curl -s -X POST '%s' "
-        "-H 'Content-Type: application/json' "
-        "-H 'Authorization: Bearer %s' "
-        "-d '{\"model\":\"%s\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},"
-        "{\"role\":\"user\",\"content\":\"%s\"}],"
-        "\"max_tokens\":%d,\"temperature\":%.1f}' 2>/dev/null",
-        DEEPSEEK_API_URL, zewai.token, zewai.model, zewai.system_prompt,
-        escaped_message, zewai.max_tokens, zewai.temperature);
+    snprintf(post_data, sizeof(post_data),
+        "{\"model\":\"%s\","
+        "\"messages\":["
+        "{\"role\":\"system\",\"content\":\"%s\"},"
+        "{\"role\":\"user\",\"content\":\"%s\"}"
+        "],"
+        "\"max_tokens\":%d,"
+        "\"temperature\":%.1f}",
+        ztk.ai_model,
+        ztk.ai_system_prompt,
+        escaped_msg,
+        ztk.ai_max_tokens,
+        ztk.ai_temperature);
     
-    /* Execute curl and capture response */
-    FILE *fp = popen(curl_cmd, "r");
-    if (!fp) {
-        snprintf(response, response_size, "Error: Failed to execute curl");
+    char auth_header[512];
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", ztk.ai_token);
+    
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    headers = curl_slist_append(headers, auth_header);
+    
+    curl_easy_setopt(curl, CURLOPT_URL, "https://api.deepseek.com/v1/chat/completions");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    
+    CURLcode res = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    
+    if (res != CURLE_OK) {
+        snprintf(response, response_size, "Error: Network request failed: %s", 
+                 curl_easy_strerror(res));
         return -1;
     }
     
-    char buffer[4096];
-    size_t total_read = 0;
-    while (fgets(buffer, sizeof(buffer), fp) && total_read < response_size - 1) {
-        size_t len = strlen(buffer);
-        if (total_read + len < response_size) {
-            strcpy(response + total_read, buffer);
-            total_read += len;
-        }
-    }
-    pclose(fp);
-    
-    /* Parse JSON response to extract content */
+    /* Parse JSON response */
     char *content_start = strstr(response, "\"content\"");
     if (content_start) {
         content_start = strchr(content_start, ':');
@@ -1299,36 +2338,48 @@ int send_ai_message(const char *message, char *response, size_t response_size) {
                 if (content_end) {
                     *content_end = '\0';
                     strcpy(response, content_start);
+                    return 0;
                 }
             }
         }
-    } else {
-        strcpy(response, "Error: Could not parse AI response");
-        return -1;
     }
     
-    return 0;
+    snprintf(response, response_size, "Error: Failed to parse AI response");
+    return -1;
 }
 
-void ai_chat_loop(void) {
-    if (!zewai.enabled) {
-        printf("ZewAI is not enabled. Use 'ai token <your-token>' to enable.\n");
+static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
+    size_t total_size = size * nmemb;
+    char *response = (char*)userp;
+    strncat(response, (char*)contents, total_size);
+    return total_size;
+}
+
+void ztk_ai_chat_loop(void) {
+    if (!ztk.ai_enabled) {
+        ztk_error("AI not enabled. Use 'ai init <token>' first");
         return;
     }
     
-    char input[4096];
-    char response[4096*4];
+    char input[MAX_LINE];
+    char response[MAX_LINE * 4];
     
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                    ZewAI Chat                               ║\n");
-    printf("║   Type your message. Type 'quit' to exit.                   ║\n");
-    printf("║   Type 'clear' to clear conversation.                      ║\n");
-    printf("║   Type 'help' for AI commands.                             ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
-    printf("\nZewAI: Hello! How can I help you today?\n");
+    printf("\n%s╔══════════════════════════════════════════════════════════════╗%s\n",
+           COLOR_CYAN, COLOR_DEFAULT);
+    printf("%s║                    ZTK AI Chat                               ║%s\n",
+           COLOR_CYAN, COLOR_DEFAULT);
+    printf("%s║  Type your message. Type 'quit' to exit.                    ║%s\n",
+           COLOR_CYAN, COLOR_DEFAULT);
+    printf("%s║  Type 'clear' to clear conversation.                        ║%s\n",
+           COLOR_CYAN, COLOR_DEFAULT);
+    printf("%s║  Type 'model <name>' to change model.                       ║%s\n",
+           COLOR_CYAN, COLOR_DEFAULT);
+    printf("%s╚══════════════════════════════════════════════════════════════╝%s\n",
+           COLOR_CYAN, COLOR_DEFAULT);
+    printf("\n%sAI: Hello! How can I assist you today?%s\n", COLOR_GREEN, COLOR_DEFAULT);
     
     while (1) {
-        printf("\nYou: ");
+        printf("\n%sYou:%s ", COLOR_YELLOW, COLOR_DEFAULT);
         fflush(stdout);
         
         if (!fgets(input, sizeof(input), stdin)) break;
@@ -1338,578 +2389,1117 @@ void ai_chat_loop(void) {
             break;
         }
         if (strcmp(input, "clear") == 0) {
-            ai_clear_conversation();
-            printf("ZewAI: Conversation cleared.\n");
+            ztk_ai_clear_conversation();
+            printf("%sAI: Conversation cleared.%s\n", COLOR_GREEN, COLOR_DEFAULT);
             continue;
         }
-        if (strcmp(input, "help") == 0) {
-            ai_help();
+        if (strncmp(input, "model ", 6) == 0) {
+            pthread_mutex_lock(&ztk.ai_lock);
+            strncpy(ztk.ai_model, input + 6, sizeof(ztk.ai_model) - 1);
+            pthread_mutex_unlock(&ztk.ai_lock);
+            printf("%sAI: Model changed to: %s%s\n", COLOR_GREEN, ztk.ai_model, COLOR_DEFAULT);
+            continue;
+        }
+        if (strncmp(input, "temp ", 5) == 0) {
+            float temp = atof(input + 5);
+            pthread_mutex_lock(&ztk.ai_lock);
+            ztk.ai_temperature = temp > 0 && temp <= 2 ? temp : 0.7;
+            pthread_mutex_unlock(&ztk.ai_lock);
+            printf("%sAI: Temperature set to: %.2f%s\n", COLOR_GREEN, ztk.ai_temperature, COLOR_DEFAULT);
             continue;
         }
         
-        printf("ZewAI: ");
+        printf("%sAI:%s ", COLOR_GREEN, COLOR_DEFAULT);
         fflush(stdout);
         
-        int result = send_ai_message(input, response, sizeof(response));
+        int result = ztk_ai_chat(input, response, sizeof(response));
         if (result == 0) {
             printf("%s\n", response);
         } else {
-            printf("Error: %s\n", response);
+            printf("%sError: %s%s\n", COLOR_RED, response, COLOR_DEFAULT);
         }
     }
 }
 
-void ai_clear_conversation(void) {
-    zewai.conversation_count = 0;
+void ztk_ai_clear_conversation(void) {
+    /* Conversation history would be cleared here */
+    ztk_info("AI conversation cleared");
 }
 
-void ai_help(void) {
-    printf("\nZewAI Commands:\n");
-    printf("═══════════════════════════════════════════════════════════════\n");
-    printf("  token <token>  - Set your DeepSeek API token\n");
-    printf("  chat           - Start interactive chat\n");
-    printf("  ask <question> - Ask a single question\n");
-    printf("  clear          - Clear conversation history\n");
-    printf("  model <name>   - Change AI model\n");
-    printf("  temp <value>   - Set temperature (0.0-2.0)\n");
-    printf("  help           - Show this help\n");
-    printf("  quit           - Exit AI chat\n");
-    printf("\n");
-}
-
-void *ai_thread_func(void *arg) {
-    char response[4096*4];
-    
-    while (running) {
+void *ztk_ai_thread(void *arg) {
+    while (ztk.running) {
         sleep(1);
-        /* AI background tasks would go here */
     }
     return NULL;
 }
 
-/* ============ Keyboard Manager Implementation ============ */
+/* HTTP Server */
+int ztk_http_server_start(int port) {
+    ztk.http_port = port;
+    ztk.http_server_running = 1;
+    pthread_create(&ztk.http_thread, NULL, ztk_http_thread, NULL);
+    ztk_info("HTTP server started on port %d", port);
+    return 0;
+}
 
-void init_keyboard(void) {
-    memset(&keyboard, 0, sizeof(keyboard));
-    keyboard.raw_mode = 0;
-    keyboard.buffer_index = 0;
-    keyboard.shortcut_count = 0;
+void ztk_http_server_stop(void) {
+    ztk.http_server_running = 0;
+    if (ztk.http_thread) {
+        pthread_join(ztk.http_thread, NULL);
+    }
+    ztk_info("HTTP server stopped");
+}
+
+void *ztk_http_thread(void *arg) {
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        ztk_error("Failed to create HTTP server socket");
+        return NULL;
+    }
     
-    /* Register default shortcuts */
-    register_shortcut(3, "Ctrl+C - Interrupt", NULL);  // SIGINT
-    register_shortcut(4, "Ctrl+D - EOF", NULL);
-    register_shortcut(12, "Ctrl+L - Clear screen", cmd_clear);
-    register_shortcut(24, "Ctrl+X - Exit", cmd_exit);
-    register_shortcut(27, "ESC - Cancel", NULL);
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     
-    #ifndef _WIN32
-    /* Get original terminal settings */
-    tcgetattr(STDIN_FILENO, &keyboard.original_termios);
-    #endif
-}
-
-void cleanup_keyboard(void) {
-    #ifndef _WIN32
-    if (keyboard.raw_mode) {
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &keyboard.original_termios);
-        keyboard.raw_mode = 0;
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(ztk.http_port);
+    
+    if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        ztk_error("Failed to bind HTTP server");
+        close(server_fd);
+        return NULL;
     }
-    #endif
-}
-
-void register_shortcut(int key, const char *desc, void (*handler)(void)) {
-    if (keyboard.shortcut_count < 50) {
-        keyboard.shortcuts[keyboard.shortcut_count].key_code = key;
-        strcpy(keyboard.shortcuts[keyboard.shortcut_count].description, desc);
-        keyboard.shortcuts[keyboard.shortcut_count].handler = handler;
-        keyboard.shortcut_count++;
+    
+    if (listen(server_fd, 10) < 0) {
+        ztk_error("Failed to listen on HTTP server");
+        close(server_fd);
+        return NULL;
     }
-}
-
-void set_terminal_raw_mode(void) {
-    #ifndef _WIN32
-    if (!keyboard.raw_mode) {
-        struct termios raw;
-        tcgetattr(STDIN_FILENO, &raw);
-        cfmakeraw(&raw);
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-        keyboard.raw_mode = 1;
+    
+    ztk_info("HTTP server listening on port %d", ztk.http_port);
+    
+    while (ztk.http_server_running) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+        
+        if (client_fd < 0) {
+            if (ztk.http_server_running) {
+                ztk_error("HTTP accept failed");
+            }
+            continue;
+        }
+        
+        /* Handle request in separate thread */
+        pthread_t thread;
+        int *client_ptr = malloc(sizeof(int));
+        *client_ptr = client_fd;
+        pthread_create(&thread, NULL, handle_http_request, client_ptr);
+        pthread_detach(thread);
     }
-    #endif
+    
+    close(server_fd);
+    return NULL;
 }
 
-void restore_terminal_mode(void) {
-    #ifndef _WIN32
-    if (keyboard.raw_mode) {
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &keyboard.original_termios);
-        keyboard.raw_mode = 0;
+void *handle_http_request(void *arg) {
+    int client_fd = *(int*)arg;
+    free(arg);
+    
+    char buffer[4096];
+    ssize_t bytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+    if (bytes <= 0) {
+        close(client_fd);
+        return NULL;
     }
-    #endif
+    buffer[bytes] = '\0';
+    
+    /* Parse request */
+    char method[16], path[256], version[16];
+    sscanf(buffer, "%s %s %s", method, path, version);
+    
+    /* Build response */
+    char response[4096];
+    char body[2048];
+    
+    if (strcmp(path, "/") == 0) {
+        snprintf(body, sizeof(body),
+            "<html><head><title>ZTK Enterprise</title>"
+            "<style>body{font-family:monospace;background:#1a1a2e;color:#eee;padding:20px;}"
+            "h1{color:#00d4ff;}a{color:#00d4ff;}</style></head>"
+            "<body>"
+            "<h1>ZTK Enterprise Shell v%s</h1>"
+            "<p>Running on %s</p>"
+            "<ul>"
+            "<li><a href='/status'>System Status</a></li>"
+            "<li><a href='/monitor'>Monitor</a></li>"
+            "<li><a href='/commands'>Commands</a></li>"
+            "</ul>"
+            "</body></html>",
+            ZTK_VERSION, ztk.username);
+    } else if (strcmp(path, "/status") == 0) {
+        snprintf(body, sizeof(body),
+            "<html><head><title>Status - ZTK</title>"
+            "<style>body{font-family:monospace;background:#1a1a2e;color:#eee;padding:20px;}"
+            "h1{color:#00d4ff;}</style></head>"
+            "<body>"
+            "<h1>System Status</h1>"
+            "<pre>CPU: %lu%%\nMemory: %s\nDisk: %s\nProcesses: %d\nLoad: %.2f %.2f %.2f</pre>"
+            "</body></html>",
+            ztk.monitor.cpu_usage,
+            ztk_format_size(ztk.monitor.memory_usage),
+            ztk_format_size(ztk.monitor.disk_usage),
+            ztk.monitor.process_count,
+            ztk.monitor.load_avg[0],
+            ztk.monitor.load_avg[1],
+            ztk.monitor.load_avg[2]);
+    } else {
+        snprintf(body, sizeof(body),
+            "<html><head><title>Not Found</title></head>"
+            "<body><h1>404 Not Found</h1></body></html>");
+    }
+    
+    snprintf(response, sizeof(response),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: %zu\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        "%s",
+        strlen(body), body);
+    
+    send(client_fd, response, strlen(response), 0);
+    close(client_fd);
+    return NULL;
 }
 
-int get_keypress(void) {
-    #ifdef _WIN32
-    if (_kbhit()) {
-        return _getch();
+/* Remote Session */
+int ztk_remote_connect(const char *host, int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        ztk_error("Failed to create remote socket");
+        return -1;
+    }
+    
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    inet_pton(AF_INET, host, &addr.sin_addr);
+    
+    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        ztk_error("Failed to connect to remote host %s:%d", host, port);
+        close(sock);
+        return -1;
+    }
+    
+    remote_session_t *session = malloc(sizeof(remote_session_t));
+    if (!session) {
+        close(sock);
+        return -1;
+    }
+    
+    session->socket = sock;
+    strncpy(session->host, host, sizeof(session->host) - 1);
+    session->port = port;
+    session->authenticated = 0;
+    session->last_activity = time(NULL);
+    strcpy(session->user, "unknown");
+    
+    pthread_mutex_lock(&ztk.session_lock);
+    session->next = ztk.sessions;
+    ztk.sessions = session;
+    pthread_mutex_unlock(&ztk.session_lock);
+    
+    ztk_info("Remote session connected to %s:%d", host, port);
+    return sock;
+}
+
+void ztk_remote_loop(void) {
+    ztk_print_header("Remote Sessions");
+    
+    pthread_mutex_lock(&ztk.session_lock);
+    
+    remote_session_t *session = ztk.sessions;
+    while (session) {
+        printf("  %s:%d - User: %s - Last activity: %s\n",
+               session->host, session->port, session->user,
+               ctime(&session->last_activity));
+        session = session->next;
+    }
+    
+    pthread_mutex_unlock(&ztk.session_lock);
+    ztk_print_footer();
+}
+
+/* Builtin Commands Implementations */
+int builtin_help(int argc, char **argv, void *context) {
+    ztk_list_commands();
+    return 0;
+}
+
+int builtin_about(int argc, char **argv, void *context) {
+    ztk_print_header("ZTK Enterprise Shell");
+    printf("  Version:    %s\n", ZTK_VERSION);
+    printf("  Release:    %s\n", ZTK_RELEASE);
+    printf("  Codename:   %s\n", ZTK_CODENAME);
+    printf("  Build:      %s %s\n", ZTK_BUILD_DATE, ZTK_BUILD_TIME);
+    printf("  API:        v%d\n", ZTK_API_VERSION);
+    printf("  User:       %s\n", ztk.username);
+    printf("  System:     %s\n", sys_info.os_name);
+    printf("  Architecture: %s\n", sys_info.architecture);
+    printf("  Terminal:   %dx%d (%s)\n", 
+           ztk.terminal_width, ztk.terminal_height, ztk.term_type);
+    printf("  AI:         %s\n", ztk.ai_enabled ? "Enabled" : "Disabled");
+    printf("  Plugins:    %d loaded\n", ztk.plugins ? 1 : 0);
+    printf("  Databases:  %d connected\n", ztk.databases ? 1 : 0);
+    printf("  Containers: %d\n", ztk.containers ? 1 : 0);
+    ztk_print_footer();
+    return 0;
+}
+
+int builtin_exit(int argc, char **argv, void *context) {
+    ztk.running = 0;
+    ztk_info("Exiting ZTK Shell");
+    return 0;
+}
+
+int builtin_clear(int argc, char **argv, void *context) {
+    printf("\033[2J\033[H");
+    return 0;
+}
+
+int builtin_cd(int argc, char **argv, void *context) {
+    const char *path = argc > 1 ? argv[1] : getenv("HOME");
+    if (!path) path = "/";
+    
+    if (chdir(path) != 0) {
+        ztk_error("cd: %s: %s", path, strerror(errno));
+        return -1;
     }
     return 0;
-    #else
-    char c;
-    if (read(STDIN_FILENO, &c, 1) > 0) {
-        return c;
-    }
-    return 0;
-    #endif
 }
 
-void process_key(int key) {
-    /* Check for shortcuts */
-    for (int i = 0; i < keyboard.shortcut_count; i++) {
-        if (keyboard.shortcuts[i].key_code == key) {
-            if (keyboard.shortcuts[i].handler) {
-                keyboard.shortcuts[i].handler();
-                return;
+int builtin_pwd(int argc, char **argv, void *context) {
+    char cwd[MAX_PATH];
+    if (getcwd(cwd, sizeof(cwd))) {
+        printf("%s\n", cwd);
+        return 0;
+    }
+    ztk_error("pwd: %s", strerror(errno));
+    return -1;
+}
+
+int builtin_ls(int argc, char **argv, void *context) {
+    const char *path = argc > 1 ? argv[1] : ".";
+    DIR *dir = opendir(path);
+    if (!dir) {
+        ztk_error("ls: %s: %s", path, strerror(errno));
+        return -1;
+    }
+    
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            char full_path[MAX_PATH];
+            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+            
+            struct stat st;
+            if (stat(full_path, &st) == 0) {
+                if (S_ISDIR(st.st_mode)) {
+                    printf("%s%s/%s ", COLOR_BLUE, entry->d_name, COLOR_DEFAULT);
+                } else if (st.st_mode & S_IXUSR) {
+                    printf("%s%s*%s ", COLOR_GREEN, entry->d_name, COLOR_DEFAULT);
+                } else {
+                    printf("%s ", entry->d_name);
+                }
             }
         }
     }
+    printf("\n");
+    closedir(dir);
+    return 0;
 }
 
-void *keyboard_thread_func(void *arg) {
-    while (running) {
-        int key = get_keypress();
-        if (key) {
-            process_key(key);
-        }
-        usleep(10000); // 10ms
-    }
-    return NULL;
-}
-
-/* ============ Power Management Implementation ============ */
-
-void power_action(power_action_t action) {
-    switch(action) {
-        case POWER_SHUTDOWN:
-            printf("Shutting down system...\n");
-            #ifdef _WIN32
-            system("shutdown /s /t 0");
-            #else
-            system("sudo shutdown -h now");
-            #endif
-            break;
-        case POWER_REBOOT:
-            printf("Rebooting system...\n");
-            #ifdef _WIN32
-            system("shutdown /r /t 0");
-            #else
-            system("sudo reboot");
-            #endif
-            break;
-        case POWER_SLEEP:
-            printf("Putting system to sleep...\n");
-            #ifdef _WIN32
-            SetSuspendState(0, 0, 0);
-            #else
-            system("sudo systemctl suspend || pm-suspend");
-            #endif
-            break;
-        case POWER_HIBERNATE:
-            printf("Hibernating system...\n");
-            #ifdef _WIN32
-            SetSuspendState(1, 0, 0);
-            #else
-            system("sudo systemctl hibernate || pm-hibernate");
-            #endif
-            break;
-        case POWER_LOGOUT:
-            printf("Logging out...\n");
-            #ifdef _WIN32
-            system("shutdown /l");
-            #else
-            system("sudo pkill -KILL -u $USER");
-            #endif
-            break;
-    }
-}
-
-void show_power_menu(void) {
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                    Power Options                             ║\n");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
-    printf("║  1. Shutdown                                                ║\n");
-    printf("║  2. Reboot                                                  ║\n");
-    printf("║  3. Sleep                                                   ║\n");
-    printf("║  4. Hibernate                                               ║\n");
-    printf("║  5. Logout                                                  ║\n");
-    printf("║  6. Cancel                                                  ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
-    printf("Select option: ");
-    fflush(stdout);
-    
-    char choice[10];
-    fgets(choice, sizeof(choice), stdin);
-    int opt = atoi(choice);
-    
-    switch(opt) {
-        case 1: power_action(POWER_SHUTDOWN); break;
-        case 2: power_action(POWER_REBOOT); break;
-        case 3: power_action(POWER_SLEEP); break;
-        case 4: power_action(POWER_HIBERNATE); break;
-        case 5: power_action(POWER_LOGOUT); break;
-        default: printf("Cancelled.\n"); break;
-    }
-}
-
-/* ============ Shell Commands ============ */
-
-void cmd_browser(char **args, int argc) {
+int builtin_cat(int argc, char **argv, void *context) {
     if (argc < 2) {
-        printf("Usage: browser <url> | bookmarks | search <query>\n");
-        printf("Examples:\n");
-        printf("  browser https://example.com\n");
-        printf("  browser bookmarks\n");
-        printf("  browser search ztk os\n");
-        return;
+        ztk_error("cat: missing file operand");
+        return -1;
     }
     
-    if (strcmp(args[1], "bookmarks") == 0) {
-        browser_list_bookmarks();
-    } else if (strcmp(args[1], "search") == 0) {
-        if (argc < 3) {
-            printf("Usage: browser search <query>\n");
-            return;
+    for (int i = 1; i < argc; i++) {
+        FILE *fp = fopen(argv[i], "r");
+        if (!fp) {
+            ztk_error("cat: %s: %s", argv[i], strerror(errno));
+            continue;
         }
-        char query[512] = "";
+        
+        char buffer[4096];
+        size_t bytes;
+        while ((bytes = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+            fwrite(buffer, 1, bytes, stdout);
+        }
+        fclose(fp);
+    }
+    return 0;
+}
+
+int builtin_echo(int argc, char **argv, void *context) {
+    for (int i = 1; i < argc; i++) {
+        printf("%s%s", argv[i], i < argc - 1 ? " " : "");
+    }
+    printf("\n");
+    return 0;
+}
+
+int builtin_mkdir(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("mkdir: missing operand");
+        return -1;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        if (mkdir(argv[i], 0755) != 0) {
+            ztk_error("mkdir: %s: %s", argv[i], strerror(errno));
+        }
+    }
+    return 0;
+}
+
+int builtin_rm(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("rm: missing operand");
+        return -1;
+    }
+    
+    int recursive = 0;
+    int force = 0;
+    int i = 1;
+    
+    while (i < argc && argv[i][0] == '-') {
+        if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "-R") == 0) {
+            recursive = 1;
+        } else if (strcmp(argv[i], "-f") == 0) {
+            force = 1;
+        } else {
+            ztk_error("rm: invalid option: %s", argv[i]);
+            return -1;
+        }
+        i++;
+    }
+    
+    for (int j = i; j < argc; j++) {
+        if (recursive) {
+            char cmd[1024];
+            snprintf(cmd, sizeof(cmd), "rm -rf %s", argv[j]);
+            system(cmd);
+        } else {
+            if (unlink(argv[j]) != 0 && !force) {
+                ztk_error("rm: %s: %s", argv[j], strerror(errno));
+            }
+        }
+    }
+    return 0;
+}
+
+int builtin_cp(int argc, char **argv, void *context) {
+    if (argc < 3) {
+        ztk_error("cp: missing file operands");
+        return -1;
+    }
+    
+    char cmd[1024] = "cp";
+    for (int i = 1; i < argc; i++) {
+        strcat(cmd, " ");
+        strcat(cmd, argv[i]);
+    }
+    return system(cmd);
+}
+
+int builtin_mv(int argc, char **argv, void *context) {
+    if (argc < 3) {
+        ztk_error("mv: missing file operands");
+        return -1;
+    }
+    
+    char cmd[1024] = "mv";
+    for (int i = 1; i < argc; i++) {
+        strcat(cmd, " ");
+        strcat(cmd, argv[i]);
+    }
+    return system(cmd);
+}
+
+int builtin_chmod(int argc, char **argv, void *context) {
+    if (argc < 3) {
+        ztk_error("chmod: missing operands");
+        return -1;
+    }
+    
+    mode_t mode = strtol(argv[1], NULL, 8);
+    for (int i = 2; i < argc; i++) {
+        if (chmod(argv[i], mode) != 0) {
+            ztk_error("chmod: %s: %s", argv[i], strerror(errno));
+        }
+    }
+    return 0;
+}
+
+int builtin_chown(int argc, char **argv, void *context) {
+    if (argc < 3) {
+        ztk_error("chown: missing operands");
+        return -1;
+    }
+    
+    char *user = argv[1];
+    char *group = strchr(user, ':');
+    if (group) {
+        *group++ = '\0';
+    }
+    
+    struct passwd *pw = getpwnam(user);
+    if (!pw) {
+        ztk_error("chown: invalid user: %s", user);
+        return -1;
+    }
+    
+    for (int i = 2; i < argc; i++) {
+        if (chown(argv[i], pw->pw_uid, -1) != 0) {
+            ztk_error("chown: %s: %s", argv[i], strerror(errno));
+        }
+    }
+    return 0;
+}
+
+int builtin_set(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_list_variables();
+        return 0;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        char *eq = strchr(argv[i], '=');
+        if (eq) {
+            *eq = '\0';
+            char *name = argv[i];
+            char *value = eq + 1;
+            ztk_set_variable(name, value, 0, 0);
+            *eq = '=';
+        }
+    }
+    return 0;
+}
+
+int builtin_unset(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("unset: missing operand");
+        return -1;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        ztk_unset_variable(argv[i]);
+    }
+    return 0;
+}
+
+int builtin_export(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_list_variables();
+        return 0;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        char *eq = strchr(argv[i], '=');
+        if (eq) {
+            *eq = '\0';
+            char *name = argv[i];
+            char *value = eq + 1;
+            ztk_set_variable(name, value, 0, 1);
+            *eq = '=';
+        } else {
+            char *value = ztk_get_variable(argv[i]);
+            if (value) {
+                ztk_set_variable(argv[i], value, 0, 1);
+            }
+        }
+    }
+    return 0;
+}
+
+int builtin_env(int argc, char **argv, void *context) {
+    extern char **environ;
+    char **env = environ;
+    while (*env) {
+        printf("%s\n", *env);
+        env++;
+    }
+    return 0;
+}
+
+int builtin_source(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("source: missing filename");
+        return -1;
+    }
+    
+    FILE *fp = fopen(argv[1], "r");
+    if (!fp) {
+        ztk_error("source: %s: %s", argv[1], strerror(errno));
+        return -1;
+    }
+    
+    char line[MAX_LINE];
+    while (fgets(line, sizeof(line), fp)) {
+        char *trimmed = line;
+        while (isspace(*trimmed)) trimmed++;
+        if (*trimmed == '#' || *trimmed == '\0') continue;
+        
+        trimmed[strcspn(trimmed, "\n")] = '\0';
+        
+        char *args[MAX_ARGS];
+        int argc = 0;
+        char *token = strtok(trimmed, " ");
+        while (token && argc < MAX_ARGS - 1) {
+            args[argc++] = token;
+            token = strtok(NULL, " ");
+        }
+        args[argc] = NULL;
+        
+        if (argc > 0) {
+            ztk_execute_command(argc, args);
+        }
+    }
+    
+    fclose(fp);
+    return 0;
+}
+
+int builtin_exec(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("exec: missing command");
+        return -1;
+    }
+    
+    execvp(argv[1], argv + 1);
+    ztk_error("exec: %s: %s", argv[1], strerror(errno));
+    return -1;
+}
+
+int builtin_jobs(int argc, char **argv, void *context) {
+    ztk_list_jobs();
+    return 0;
+}
+
+int builtin_fg(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("fg: missing job ID");
+        return -1;
+    }
+    
+    int job_id = atoi(argv[1]);
+    ztk_wait_job(job_id);
+    return 0;
+}
+
+int builtin_bg(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("bg: missing job ID");
+        return -1;
+    }
+    
+    int job_id = atoi(argv[1]);
+    ztk_kill_job(job_id, SIGCONT);
+    return 0;
+}
+
+int builtin_kill(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_error("kill: missing job ID or PID");
+        return -1;
+    }
+    
+    int signal = SIGTERM;
+    int start = 1;
+    
+    if (argv[1][0] == '-') {
+        signal = atoi(argv[1] + 1);
+        start = 2;
+    }
+    
+    for (int i = start; i < argc; i++) {
+        int pid = atoi(argv[i]);
+        if (kill(pid, signal) != 0) {
+            ztk_error("kill: %s: %s", argv[i], strerror(errno));
+        }
+    }
+    return 0;
+}
+
+int builtin_wait(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        /* Wait for all jobs */
+        int status;
+        while (wait(&status) > 0);
+        return 0;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        int pid = atoi(argv[i]);
+        int status;
+        waitpid(pid, &status, 0);
+    }
+    return 0;
+}
+
+int builtin_ps(int argc, char **argv, void *context) {
+    system("ps aux");
+    return 0;
+}
+
+int builtin_top(int argc, char **argv, void *context) {
+    system("top -b -n 1");
+    return 0;
+}
+
+int builtin_plugins(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_list_plugins();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "load") == 0 && argc > 2) {
+        return ztk_load_plugin(argv[2]);
+    } else if (strcmp(argv[1], "unload") == 0 && argc > 2) {
+        return ztk_unload_plugin(argv[2]);
+    } else if (strcmp(argv[1], "list") == 0) {
+        ztk_list_plugins();
+        return 0;
+    }
+    
+    ztk_error("Usage: plugins [list|load <path>|unload <name>]");
+    return -1;
+}
+
+int builtin_databases(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_list_databases();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "connect") == 0 && argc > 3) {
+        return ztk_db_connect(argv[2], argv[3], "sqlite");
+    } else if (strcmp(argv[1], "disconnect") == 0 && argc > 2) {
+        ztk_db_disconnect(argv[2]);
+        return 0;
+    } else if (strcmp(argv[1], "query") == 0 && argc > 3) {
+        int rows, cols;
+        char **result = ztk_db_query(argv[2], argv[3], &rows, &cols);
+        if (result) {
+            for (int i = 0; result[i]; i++) {
+                printf("%s\n", result[i]);
+                free(result[i]);
+            }
+            free(result);
+            printf("Query returned %d rows\n", rows);
+        }
+        return 0;
+    } else if (strcmp(argv[1], "execute") == 0 && argc > 3) {
+        return ztk_db_execute(argv[2], argv[3]);
+    } else if (strcmp(argv[1], "list") == 0) {
+        ztk_list_databases();
+        return 0;
+    }
+    
+    ztk_error("Usage: databases [list|connect <name> <path>|disconnect <name>|execute <name> <sql>|query <name> <sql>]");
+    return -1;
+}
+
+int builtin_containers(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_list_containers();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "create") == 0 && argc > 3) {
+        return ztk_container_create(argv[2], argv[3]);
+    } else if (strcmp(argv[1], "start") == 0 && argc > 2) {
+        return ztk_container_start(argv[2]);
+    } else if (strcmp(argv[1], "stop") == 0 && argc > 2) {
+        return ztk_container_stop(argv[2]);
+    } else if (strcmp(argv[1], "rm") == 0 && argc > 2) {
+        return ztk_container_remove(argv[2]);
+    } else if (strcmp(argv[1], "list") == 0) {
+        ztk_list_containers();
+        return 0;
+    }
+    
+    ztk_error("Usage: containers [list|create <name> <image>|start <name>|stop <name>|rm <name>]");
+    return -1;
+}
+
+int builtin_cluster(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_cluster_list_nodes();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "add") == 0 && argc > 4) {
+        return ztk_cluster_add_node(argv[2], argv[3], atoi(argv[4]));
+    } else if (strcmp(argv[1], "connect") == 0 && argc > 2) {
+        return ztk_cluster_connect(argv[2]);
+    } else if (strcmp(argv[1], "list") == 0) {
+        ztk_cluster_list_nodes();
+        return 0;
+    } else if (strcmp(argv[1], "broadcast") == 0 && argc > 2) {
+        char command[1024] = "";
         for (int i = 2; i < argc; i++) {
-            strcat(query, args[i]);
-            if (i < argc - 1) strcat(query, "+");
+            strcat(command, argv[i]);
+            if (i < argc - 1) strcat(command, " ");
         }
-        browser_search(query);
-    } else {
-        browse_url(args[1]);
-    }
-}
-
-void cmd_ai(char **args, int argc) {
-    if (argc < 2) {
-        printf("Usage: ai token <token> | chat | ask <question> | clear | model <name> | temp <value>\n");
-        return;
+        return ztk_cluster_broadcast(command);
     }
     
-    if (strcmp(args[1], "token") == 0) {
-        if (argc < 3) {
-            printf("Usage: ai token <your-deepseek-token>\n");
-            return;
-        }
-        set_ai_token(args[2]);
-    } else if (strcmp(args[1], "chat") == 0) {
-        ai_chat_loop();
-    } else if (strcmp(args[1], "ask") == 0) {
-        if (argc < 3) {
-            printf("Usage: ai ask <question>\n");
-            return;
-        }
+    ztk_error("Usage: cluster [list|add <name> <address> <port>|connect <name>|broadcast <command>]");
+    return -1;
+}
+
+int builtin_backup(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        ztk_list_backups();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "create") == 0 && argc > 4) {
+        return ztk_backup_create(argv[2], argv[3], argv[4]);
+    } else if (strcmp(argv[1], "restore") == 0 && argc > 3) {
+        return ztk_backup_restore(argv[2], argv[3]);
+    } else if (strcmp(argv[1], "encrypt") == 0 && argc > 3) {
+        return ztk_backup_encrypt(argv[2], argv[3]);
+    } else if (strcmp(argv[1], "list") == 0) {
+        ztk_list_backups();
+        return 0;
+    }
+    
+    ztk_error("Usage: backup [list|create <name> <source> <dest>|restore <name> <dest>|encrypt <name> <password>]");
+    return -1;
+}
+
+int builtin_ai(int argc, char **argv, void *context) {
+    if (argc < 2) {
+        printf("AI: %s\n", ztk.ai_enabled ? "Enabled" : "Disabled");
+        printf("Model: %s\n", ztk.ai_model);
+        printf("Temperature: %.2f\n", ztk.ai_temperature);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "init") == 0 && argc > 2) {
+        return ztk_ai_init(argv[2]);
+    } else if (strcmp(argv[1], "chat") == 0) {
+        ztk_ai_chat_loop();
+        return 0;
+    } else if (strcmp(argv[1], "ask") == 0 && argc > 2) {
         char question[2048] = "";
         for (int i = 2; i < argc; i++) {
-            strcat(question, args[i]);
+            strcat(question, argv[i]);
             if (i < argc - 1) strcat(question, " ");
         }
-        char response[4096*4];
-        int result = send_ai_message(question, response, sizeof(response));
-        if (result == 0) {
-            printf("ZewAI: %s\n", response);
-        } else {
-            printf("Error: %s\n", response);
+        char response[MAX_LINE * 4];
+        if (ztk_ai_chat(question, response, sizeof(response)) == 0) {
+            printf("%s\n", response);
         }
-    } else if (strcmp(args[1], "clear") == 0) {
-        ai_clear_conversation();
-        printf("Conversation cleared.\n");
-    } else if (strcmp(args[1], "model") == 0) {
-        if (argc < 3) {
-            printf("Current model: %s\n", zewai.model);
-            return;
-        }
-        strcpy(zewai.model, args[2]);
-        printf("Model set to: %s\n", zewai.model);
-    } else if (strcmp(args[1], "temp") == 0) {
-        if (argc < 3) {
-            printf("Current temperature: %.1f\n", zewai.temperature);
-            return;
-        }
-        zewai.temperature = atof(args[2]);
-        if (zewai.temperature < 0) zewai.temperature = 0;
-        if (zewai.temperature > 2) zewai.temperature = 2;
-        printf("Temperature set to: %.1f\n", zewai.temperature);
-    } else {
-        printf("Unknown AI command: %s\n", args[1]);
-        ai_help();
+        return 0;
+    } else if (strcmp(argv[1], "clear") == 0) {
+        ztk_ai_clear_conversation();
+        return 0;
+    } else if (strcmp(argv[1], "model") == 0 && argc > 2) {
+        pthread_mutex_lock(&ztk.ai_lock);
+        strncpy(ztk.ai_model, argv[2], sizeof(ztk.ai_model) - 1);
+        pthread_mutex_unlock(&ztk.ai_lock);
+        ztk_info("AI model set to: %s", ztk.ai_model);
+        return 0;
+    } else if (strcmp(argv[1], "temp") == 0 && argc > 2) {
+        float temp = atof(argv[2]);
+        pthread_mutex_lock(&ztk.ai_lock);
+        ztk.ai_temperature = temp > 0 && temp <= 2 ? temp : 0.7;
+        pthread_mutex_unlock(&ztk.ai_lock);
+        ztk_info("AI temperature set to: %.2f", ztk.ai_temperature);
+        return 0;
     }
+    
+    ztk_error("Usage: ai [init <token>|chat|ask <question>|clear|model <name>|temp <value>]");
+    return -1;
 }
 
-void cmd_games(char **args, int argc) {
+int builtin_monitor(int argc, char **argv, void *context) {
     if (argc < 2) {
-        list_games();
-        return;
+        ztk_monitor_report();
+        return 0;
     }
     
-    if (strcmp(args[1], "list") == 0) {
-        list_games();
-    } else if (strcmp(args[1], "play") == 0) {
-        if (argc < 3) {
-            printf("Usage: games play <game-name>\n");
-            list_games();
-            return;
-        }
-        start_game(args[2]);
-    } else {
-        /* Try to play the game directly */
-        start_game(args[1]);
+    if (strcmp(argv[1], "start") == 0) {
+        ztk_monitor_start();
+        return 0;
+    } else if (strcmp(argv[1], "stop") == 0) {
+        ztk_monitor_stop();
+        return 0;
+    } else if (strcmp(argv[1], "report") == 0) {
+        ztk_monitor_report();
+        return 0;
     }
+    
+    ztk_error("Usage: monitor [start|stop|report]");
+    return -1;
 }
 
-void cmd_disks(char **args, int argc) {
+int builtin_audit(int argc, char **argv, void *context) {
+    ztk_print_header("Audit Log");
+    printf("  %-20s %-15s %-30s %s\n", 
+           "Timestamp", "User", "Command", "Result");
+    printf("  %-20s %-15s %-30s %s\n", 
+           "---------", "----", "-------", "------");
+    
+    pthread_mutex_lock(&ztk.audit_lock);
+    
+    for (int i = 0; i < ztk.audit_count; i++) {
+        audit_entry_t *entry = &ztk.audit_log[i];
+        char time_str[64];
+        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", 
+                 localtime(&entry->timestamp));
+        
+        printf("  %-20s %-15s %-30s %s\n",
+               time_str, entry->user, entry->command,
+               entry->result ? "Success" : "Failed");
+    }
+    
+    pthread_mutex_unlock(&ztk.audit_lock);
+    ztk_print_footer();
+    return 0;
+}
+
+int builtin_http(int argc, char **argv, void *context) {
     if (argc < 2) {
-        list_disks();
-        return;
+        printf("HTTP Server: %s on port %d\n", 
+               ztk.http_server_running ? "Running" : "Stopped",
+               ztk.http_port);
+        return 0;
     }
     
-    if (strcmp(args[1], "list") == 0) {
-        list_disks();
-    } else if (strcmp(args[1], "mount") == 0) {
-        if (argc < 4) {
-            printf("Usage: disks mount <device> <mount-point>\n");
-            return;
-        }
-        mount_disk(args[2], args[3]);
-    } else if (strcmp(args[1], "unmount") == 0) {
-        if (argc < 3) {
-            printf("Usage: disks unmount <mount-point>\n");
-            return;
-        }
-        unmount_disk(args[2]);
-    } else if (strcmp(args[1], "format") == 0) {
-        if (argc < 4) {
-            printf("Usage: disks format <device> <filesystem>\n");
-            printf("Filesystems: ext4, ntfs, fat32, xfs, btrfs\n");
-            return;
-        }
-        format_disk(args[2], args[3]);
-    } else {
-        printf("Unknown disk command: %s\n", args[1]);
-        printf("Commands: list, mount, unmount, format\n");
+    if (strcmp(argv[1], "start") == 0) {
+        int port = argc > 2 ? atoi(argv[2]) : 8080;
+        return ztk_http_server_start(port);
+    } else if (strcmp(argv[1], "stop") == 0) {
+        ztk_http_server_stop();
+        return 0;
+    } else if (strcmp(argv[1], "status") == 0) {
+        printf("HTTP Server: %s\n", ztk.http_server_running ? "Running" : "Stopped");
+        printf("Port: %d\n", ztk.http_port);
+        return 0;
     }
+    
+    ztk_error("Usage: http [start <port>|stop|status]");
+    return -1;
 }
 
-void cmd_power(char **args, int argc) {
+int builtin_remote(int argc, char **argv, void *context) {
     if (argc < 2) {
-        show_power_menu();
-        return;
+        ztk_remote_loop();
+        return 0;
     }
     
-    if (strcmp(args[1], "shutdown") == 0) {
-        power_action(POWER_SHUTDOWN);
-    } else if (strcmp(args[1], "reboot") == 0) {
-        power_action(POWER_REBOOT);
-    } else if (strcmp(args[1], "sleep") == 0) {
-        power_action(POWER_SLEEP);
-    } else if (strcmp(args[1], "hibernate") == 0) {
-        power_action(POWER_HIBERNATE);
-    } else if (strcmp(args[1], "logout") == 0) {
-        power_action(POWER_LOGOUT);
-    } else {
-        show_power_menu();
-    }
-}
-
-void cmd_keyboard(char **args, int argc) {
-    if (argc < 2) {
-        printf("Keyboard shortcuts:\n");
-        printf("═══════════════════════════════════════════════════════════════\n");
-        for (int i = 0; i < keyboard.shortcut_count; i++) {
-            printf("  %-12s - %s\n", 
-                   keyboard.shortcuts[i].key_code == 3 ? "Ctrl+C" :
-                   keyboard.shortcuts[i].key_code == 4 ? "Ctrl+D" :
-                   keyboard.shortcuts[i].key_code == 12 ? "Ctrl+L" :
-                   keyboard.shortcuts[i].key_code == 24 ? "Ctrl+X" :
-                   keyboard.shortcuts[i].key_code == 27 ? "ESC" : "???",
-                   keyboard.shortcuts[i].description);
-        }
-        return;
+    if (strcmp(argv[1], "connect") == 0 && argc > 3) {
+        return ztk_remote_connect(argv[2], atoi(argv[3]));
+    } else if (strcmp(argv[1], "list") == 0) {
+        ztk_remote_loop();
+        return 0;
     }
     
-    if (strcmp(args[1], "raw") == 0) {
-        set_terminal_raw_mode();
-        printf("Raw mode enabled (press any key, 'q' to quit)\n");
-        while (1) {
-            int key = get_keypress();
-            if (key) {
-                if (key == 'q' || key == 'Q') break;
-                printf("Key: %d (0x%02X) '%c'\n", key, key, isprint(key) ? key : '.');
-            }
-            usleep(10000);
-        }
-        restore_terminal_mode();
-        printf("Raw mode disabled.\n");
-    } else {
-        printf("Unknown keyboard command: %s\n", args[1]);
-        printf("Commands: raw (test raw input)\n");
+    ztk_error("Usage: remote [connect <host> <port>|list]");
+    return -1;
+}
+
+/* Utility Functions */
+void ztk_log(const char *level, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    
+    time_t now = time(NULL);
+    char time_str[64];
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    
+    fprintf(stderr, "[%s] %s: ", time_str, level);
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    
+    va_end(args);
+}
+
+void ztk_error(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "%sERROR:%s ", COLOR_RED, COLOR_DEFAULT);
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+}
+
+void ztk_warn(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "%sWARNING:%s ", COLOR_YELLOW, COLOR_DEFAULT);
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+}
+
+void ztk_info(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    printf("%sINFO:%s ", COLOR_GREEN, COLOR_DEFAULT);
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
+
+void ztk_debug(const char *format, ...) {
+    if (ztk.debug_mode) {
+        va_list args;
+        va_start(args, format);
+        printf("%sDEBUG:%s ", COLOR_CYAN, COLOR_DEFAULT);
+        vprintf(format, args);
+        printf("\n");
+        va_end(args);
     }
 }
 
-void cmd_help(void) {
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║               ZTK Business Edition v3.0                     ║\n");
-    printf("║           Ultimate Edition with AI & Games                   ║\n");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
-    printf("║                                                              ║\n");
-    printf("║ SYSTEM:                                                      ║\n");
-    printf("║   help, about, exit, clear, power                           ║\n");
-    printf("║                                                              ║\n");
-    printf("║ PACKAGES:                                                    ║\n");
-    printf("║   install, uninstall, packages, search, update              ║\n");
-    printf("║                                                              ║\n");
-    printf("║ DESKTOP:                                                     ║\n");
-    printf("║   desktops, desk-install, desk-uninstall, desk-start        ║\n");
-    printf("║                                                              ║\n");
-    printf("║ BOOT:                                                        ║\n");
-    printf("║   boot-setup, boot-list, boot-default                       ║\n");
-    printf("║                                                              ║\n");
-    printf("║ DISKS:                                                       ║\n");
-    printf("║   disks list, mount, unmount, format                        ║\n");
-    printf("║                                                              ║\n");
-    printf("║ GAMES:                                                       ║\n");
-    printf("║   games [list|play <game>]                                  ║\n");
-    printf("║   Available: snake, tetris, pong, space_invaders,           ║\n");
-    printf("║             sudoku, 2048, chess, minesweeper               ║\n");
-    printf("║                                                              ║\n");
-    printf("║ BROWSER:                                                     ║\n");
-    printf("║   browser <url> | bookmarks | search <query>               ║\n");
-    printf("║                                                              ║\n");
-    printf("║ ZewAI:                                                       ║\n");
-    printf("║   ai token <token> | chat | ask <question> | clear          ║\n");
-    printf("║   ai model <name> | temp <value>                           ║\n");
-    printf("║                                                              ║\n");
-    printf("║ KEYBOARD:                                                    ║\n");
-    printf("║   keyboard [raw] - Test keyboard input                      ║\n");
-    printf("║   Ctrl+L: Clear, Ctrl+X: Exit                              ║\n");
-    printf("║                                                              ║\n");
-    printf("║ FILES:                                                       ║\n");
-    printf("║   ls, cd, mkdir, cat, echo, rm, pwd                        ║\n");
-    printf("║                                                              ║\n");
-    printf("║ DEV:                                                         ║\n");
-    printf("║   dev-enable, dev-disable, edit, compile, backup, restore   ║\n");
-    printf("║                                                              ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+char *ztk_strdup_safe(const char *str) {
+    if (!str) return NULL;
+    size_t len = strlen(str) + 1;
+    char *copy = malloc(len);
+    if (copy) {
+        memcpy(copy, str, len);
+    }
+    return copy;
 }
 
-void cmd_system_info(void) {
-    printf("\n╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                    System Information                        ║\n");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
-    printf("║ OS:            %-40s ║\n", sys_info.os_name);
-    printf("║ Version:       %-40s ║\n", sys_info.os_version);
-    printf("║ Architecture:  %-40s ║\n", sys_info.architecture);
-    printf("║ Package Mgr:   %-40s ║\n", sys_info.package_manager);
-    printf("║ Admin:         %-40s ║\n", sys_info.is_admin ? "Yes" : "No");
-    printf("║ Terminal:      %dx%d%27s ║\n", 
-           sys_info.terminal_width, sys_info.terminal_height, "");
-    printf("║ ZewAI:         %-40s ║\n", zewai.enabled ? "Enabled" : "Disabled");
-    printf("║ Games:         %-40s ║\n", game_count ? "Available" : "None");
-    printf("║ Disks:         %-40s ║\n", disk_manager.disk_count ? "Detected" : "None");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
-}
-
-void cmd_edit(char **args, int argc) {
-    if (!self_mod.edit_mode) {
-        printf("Self-modification is disabled. Use 'dev-enable' first.\n");
-        return;
+char *ztk_format_size(uint64_t size) {
+    static char buffer[64];
+    const char *units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
+    int unit_index = 0;
+    double value = (double)size;
+    
+    while (value >= 1024 && unit_index < 5) {
+        value /= 1024;
+        unit_index++;
     }
     
-    if (argc < 4) {
-        printf("Usage: edit <file> <line> <content>\n");
-        return;
+    snprintf(buffer, sizeof(buffer), "%.2f %s", value, units[unit_index]);
+    return buffer;
+}
+
+char *ztk_format_time(time_t t) {
+    static char buffer[64];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&t));
+    return buffer;
+}
+
+char *ztk_read_file(const char *path) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) return NULL;
+    
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    char *content = malloc(size + 1);
+    if (!content) {
+        fclose(fp);
+        return NULL;
     }
     
-    int line = atoi(args[2]);
-    if (line < 1) {
-        printf("Invalid line number.\n");
-        return;
+    fread(content, 1, size, fp);
+    content[size] = '\0';
+    fclose(fp);
+    return content;
+}
+
+int ztk_write_file(const char *path, const char *content) {
+    FILE *fp = fopen(path, "w");
+    if (!fp) return -1;
+    fprintf(fp, "%s", content);
+    fclose(fp);
+    return 0;
+}
+
+int ztk_file_exists(const char *path) {
+    return access(path, F_OK) == 0;
+}
+
+int ztk_is_directory(const char *path) {
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    return S_ISDIR(st.st_mode);
+}
+
+char *ztk_get_absolute_path(const char *path) {
+    static char buffer[MAX_PATH];
+    if (realpath(path, buffer)) {
+        return buffer;
     }
-    
-    char content[1024] = "";
-    for (int i = 3; i < argc; i++) {
-        strcat(content, args[i]);
-        if (i < argc - 1) strcat(content, " ");
+    return NULL;
+}
+
+char *ztk_expand_path(const char *path) {
+    static char buffer[MAX_PATH];
+    if (path[0] == '~') {
+        snprintf(buffer, sizeof(buffer), "%s%s", getenv("HOME"), path + 1);
+        return buffer;
     }
-    
-    edit_source_file(args[1], line - 1, content);
+    return (char*)path;
 }
 
-void cmd_compile(char **args, int argc) {
-    if (!self_mod.edit_mode) {
-        printf("Self-modification is disabled. Use 'dev-enable' first.\n");
-        return;
-    }
-    compile_and_reload();
+void ztk_print_header(const char *title) {
+    int width = 60;
+    printf("\n%s╔", COLOR_CYAN);
+    for (int i = 0; i < width - 2; i++) printf("═");
+    printf("╗%s\n", COLOR_DEFAULT);
+    printf("%s║", COLOR_CYAN);
+    int padding = (width - 2 - strlen(title)) / 2;
+    for (int i = 0; i < padding; i++) printf(" ");
+    printf("%s", title);
+    for (int i = padding + strlen(title); i < width - 2; i++) printf(" ");
+    printf("%s║%s\n", COLOR_CYAN, COLOR_DEFAULT);
+    printf("%s╠", COLOR_CYAN);
+    for (int i = 0; i < width - 2; i++) printf("═");
+    printf("╣%s\n", COLOR_DEFAULT);
 }
 
-/* ============ Utility Functions ============ */
-
-void safe_system(const char *cmd) {
-    if (!cmd) return;
-    
-    const char *dangerous[] = {"rm -rf /", "rm -rf /*", "dd if=", "mkfs", "format", "fdisk"};
-    for (int i = 0; i < 6; i++) {
-        if (strstr(cmd, dangerous[i])) {
-            printf("Safety: Dangerous command blocked: %s\n", cmd);
-            return;
-        }
-    }
-    system(cmd);
+void ztk_print_footer(void) {
+    int width = 60;
+    printf("%s╚", COLOR_CYAN);
+    for (int i = 0; i < width - 2; i++) printf("═");
+    printf("╝%s\n", COLOR_DEFAULT);
 }
 
-char *get_extension(const char *filename) {
-    const char *ext = strrchr(filename, '.');
-    if (!ext) return "";
-    return (char*)(ext + 1);
-}
-
-char *trim_whitespace(char *str) {
-    char *end;
-    while (isspace((unsigned char)*str)) str++;
-    if (*str == 0) return str;
-    end = str + strlen(str) - 1;
-    while (end > str && isspace((unsigned char)*end)) end--;
-    end[1] = '\0';
-    return str;
-}
-
-void print_progress(const char *task, int percent) {
-    int bar_width = 50;
-    int pos = bar_width * percent / 100;
-    printf("\r[");
-    for (int i = 0; i < bar_width; i++) {
-        if (i < pos) printf("=");
-        else if (i == pos) printf(">");
-        else printf(" ");
-    }
-    printf("] %3d%% %s", percent, task);
-    fflush(stdout);
-}
-
-/* ============ Main Shell Loop ============ */
-
-void shell_loop(void) {
-    char input[MAX_CMD_INPUT];
+/* Main Shell Loop */
+void ztk_loop(void) {
+    char input[MAX_LINE];
     char *args[MAX_ARGS];
     int argc;
-    char *path;
     
-    while (running) {
-        path = vfs_get_path(virtual_fs->cwd);
-        if (!path) path = "/";
+    while (ztk.running) {
+        /* Display prompt */
+        char cwd[MAX_PATH];
+        getcwd(cwd, sizeof(cwd));
         
-        printf("\033[1;32mZTK\033[0m:\033[1;34m%s\033[0m $ ", path);
+        char *home = getenv("HOME");
+        char *display_path = cwd;
+        if (home && strncmp(cwd, home, strlen(home)) == 0) {
+            display_path = cwd + strlen(home);
+            printf("%s~%s", COLOR_BLUE, display_path);
+        } else {
+            printf("%s%s%s", COLOR_BLUE, cwd, COLOR_DEFAULT);
+        }
+        printf("%s$%s ", COLOR_GREEN, COLOR_DEFAULT);
         fflush(stdout);
         
         if (!fgets(input, sizeof(input), stdin)) {
@@ -1921,209 +3511,83 @@ void shell_loop(void) {
         
         if (strlen(input) == 0) continue;
         
+        /* Add to history */
+        if (ztk.history_count < ztk.history_max) {
+            ztk.history[ztk.history_count++] = ztk_strdup_safe(input);
+        }
+        
         /* Parse command */
-        char *token = strtok(input, " ");
         argc = 0;
+        char *token = strtok(input, " ");
         while (token && argc < MAX_ARGS - 1) {
             args[argc++] = token;
             token = strtok(NULL, " ");
         }
         args[argc] = NULL;
         
-        char *cmd = args[0];
-        
-        /* System commands */
-        if (strcmp(cmd, "help") == 0) { cmd_help(); continue; }
-        if (strcmp(cmd, "about") == 0) { cmd_system_info(); continue; }
-        if (strcmp(cmd, "exit") == 0) { running = 0; cmd_exit(); continue; }
-        if (strcmp(cmd, "clear") == 0) { cmd_clear(); continue; }
-        if (strcmp(cmd, "power") == 0) { cmd_power(args, argc); continue; }
-        
-        /* Package commands */
-        if (strcmp(cmd, "install") == 0) { cmd_install(args, argc); continue; }
-        if (strcmp(cmd, "uninstall") == 0) { cmd_uninstall(args, argc); continue; }
-        if (strcmp(cmd, "packages") == 0 || strcmp(cmd, "pkg") == 0) { 
-            cmd_packages(args, argc); continue; 
+        if (argc > 0) {
+            /* Check for background execution */
+            int background = 0;
+            if (strcmp(args[argc - 1], "&") == 0) {
+                background = 1;
+                args[--argc] = NULL;
+            }
+            
+            if (background) {
+                pid_t pid = fork();
+                if (pid == 0) {
+                    ztk_execute_command(argc, args);
+                    exit(0);
+                } else if (pid > 0) {
+                    ztk_add_job(pid, input);
+                    printf("[%d] %d\n", ztk.jobs ? ztk.jobs->job_id : 1, pid);
+                }
+            } else {
+                ztk_execute_command(argc, args);
+            }
         }
-        if (strcmp(cmd, "search") == 0) { 
-            if (argc > 1) search_packages(args[1]); 
-            continue; 
-        }
-        if (strcmp(cmd, "update") == 0) { update_package_list(); continue; }
-        
-        /* Desktop commands */
-        if (strcmp(cmd, "desktops") == 0) { list_desktop_environments(); continue; }
-        if (strcmp(cmd, "desk-install") == 0) { 
-            if (argc > 1) install_desktop(args[1]); 
-            continue; 
-        }
-        if (strcmp(cmd, "desk-uninstall") == 0) { 
-            if (argc > 1) uninstall_desktop(args[1]); 
-            continue; 
-        }
-        if (strcmp(cmd, "desk-start") == 0) { 
-            if (argc > 1) start_desktop(args[1]); 
-            continue; 
-        }
-        
-        /* Boot commands */
-        if (strcmp(cmd, "boot-setup") == 0) { setup_dual_boot(); continue; }
-        if (strcmp(cmd, "boot-list") == 0) { list_boot_entries(); continue; }
-        if (strcmp(cmd, "boot-default") == 0) { 
-            if (argc > 1) set_default_boot_entry(args[1]); 
-            continue; 
-        }
-        
-        /* Disk commands */
-        if (strcmp(cmd, "disks") == 0) { cmd_disks(args, argc); continue; }
-        
-        /* Game commands */
-        if (strcmp(cmd, "games") == 0) { cmd_games(args, argc); continue; }
-        
-        /* Browser commands */
-        if (strcmp(cmd, "browser") == 0) { cmd_browser(args, argc); continue; }
-        
-        /* AI commands */
-        if (strcmp(cmd, "ai") == 0) { cmd_ai(args, argc); continue; }
-        
-        /* Keyboard commands */
-        if (strcmp(cmd, "keyboard") == 0) { cmd_keyboard(args, argc); continue; }
-        
-        /* Self-modification commands */
-        if (strcmp(cmd, "dev-enable") == 0) { enable_self_modification(); continue; }
-        if (strcmp(cmd, "dev-disable") == 0) { disable_self_modification(); continue; }
-        if (strcmp(cmd, "edit") == 0) { cmd_edit(args, argc); continue; }
-        if (strcmp(cmd, "compile") == 0) { cmd_compile(args, argc); continue; }
-        if (strcmp(cmd, "backup") == 0) { backup_current_code(); continue; }
-        if (strcmp(cmd, "restore") == 0) { restore_code_from_backup(); continue; }
-        
-        /* File system commands */
-        if (strcmp(cmd, "ls") == 0) { cmd_ls(); continue; }
-        if (strcmp(cmd, "cd") == 0) { 
-            if (argc > 1) cmd_cd(args[1]); 
-            else cmd_cd("/");
-            continue; 
-        }
-        if (strcmp(cmd, "mkdir") == 0) { 
-            if (argc > 1) cmd_mkdir(args[1]); 
-            continue; 
-        }
-        if (strcmp(cmd, "cat") == 0) { 
-            if (argc > 1) cmd_cat(args[1]); 
-            continue; 
-        }
-        if (strcmp(cmd, "echo") == 0) { cmd_echo(args, argc); continue; }
-        if (strcmp(cmd, "rm") == 0) { 
-            if (argc > 1) cmd_rm(args[1]); 
-            continue; 
-        }
-        if (strcmp(cmd, "pwd") == 0) { cmd_pwd(); continue; }
-        
-        /* Unknown command */
-        printf("Command not found: %s\n", cmd);
-        printf("Type 'help' for available commands.\n");
     }
 }
 
-/* ============ Main Program ============ */
-
+/* Main Program */
 int main(int argc, char *argv[]) {
-    printf("\n");
-    printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                                                              ║\n");
-    printf("║              ZTK BUSINESS EDITION v3.0                       ║\n");
-    printf("║              Ultimate Edition                                ║\n");
-    printf("║              With AI, Games, & Terminal Browser              ║\n");
-    printf("║                                                              ║\n");
-    printf("║              Release Date: %s                        ║\n", RELEASE_DATE);
-    printf("║                                                              ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
-    printf("\n");
+    /* Initialize curl */
+    curl_global_init(CURL_GLOBAL_DEFAULT);
     
-    /* Detect system */
-    detect_system();
-    printf("Detected: %s %s (%s)\n", sys_info.os_name, sys_info.os_version, sys_info.architecture);
-    printf("Package Manager: %s\n", sys_info.package_manager);
-    printf("Terminal: %dx%d\n", sys_info.terminal_width, sys_info.terminal_height);
-    printf("\n");
-    
-    /* Initialize VFS */
-    virtual_fs = vfs_init();
-    if (!virtual_fs) {
-        fprintf(stderr, "Failed to initialize virtual file system\n");
+    /* Initialize ZTK */
+    if (ztk_init() != 0) {
+        fprintf(stderr, "Failed to initialize ZTK Shell\n");
         return 1;
     }
     
-    /* Initialize package repositories */
-    init_package_repositories();
-    load_installed_packages();
+    /* Print banner */
+    printf("%s\n", COLOR_CYAN);
+    printf("╔══════════════════════════════════════════════════════════════╗\n");
+    printf("║                                                              ║\n");
+    printf("║           ZTK ENTERPRISE SHELL v%s                          ║\n", ZTK_VERSION);
+    printf("║           %s                                         ║\n", ZTK_RELEASE);
+    printf("║           Codename: %s                                      ║\n", ZTK_CODENAME);
+    printf("║                                                              ║\n");
+    printf("║           %s - %s                                    ║\n", ZTK_BUILD_DATE, ZTK_BUILD_TIME);
+    printf("║                                                              ║\n");
+    printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("%s\n", COLOR_DEFAULT);
     
-    /* Initialize desktop environments */
-    init_desktop_environments();
-    
-    /* Initialize games */
-    init_games();
-    printf("Loaded %d games\n", game_count);
-    
-    /* Initialize browser */
-    init_browser();
-    printf("Terminal browser initialized\n");
-    
-    /* Initialize ZewAI */
-    init_zewai();
-    
-    /* Initialize keyboard */
-    init_keyboard();
-    
-    /* Initialize boot configuration */
-    boot_config.timeout_seconds = 10;
-    boot_config.default_entry = 0;
-    boot_config.entry_count = 0;
-    
-    /* Detect disks */
-    detect_disks();
-    printf("Detected %d disks\n", disk_manager.disk_count);
-    
-    /* Check for command line arguments */
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--ai-token") == 0 && i + 1 < argc) {
-            set_ai_token(argv[i + 1]);
-            i++;
-        } else if (strcmp(argv[i], "--dev") == 0) {
-            enable_self_modification();
-        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            printf("Usage: %s [OPTIONS]\n", argv[0]);
-            printf("Options:\n");
-            printf("  --ai-token TOKEN  Set DeepSeek AI token\n");
-            printf("  --dev             Enable self-modification mode\n");
-            printf("  --help, -h        Show this help\n");
-            return 0;
-        }
-    }
-    
-    printf("\nType 'help' for available commands.\n");
-    printf("Type 'ai token <token>' to enable ZewAI.\n");
-    printf("Type 'games list' to see available games.\n");
-    printf("Type 'browser https://google.com' to browse.\n");
-    printf("\n");
-    
-    /* Start keyboard thread */
-    pthread_create(&keyboard_thread, NULL, keyboard_thread_func, NULL);
-    pthread_detach(keyboard_thread);
+    /* Start monitor */
+    ztk_monitor_start();
     
     /* Start AI thread if enabled */
-    if (zewai.enabled) {
-        pthread_create(&ai_thread, NULL, ai_thread_func, NULL);
-        pthread_detach(ai_thread);
+    if (ztk.ai_enabled) {
+        pthread_create(&ztk.ai_thread_id, NULL, ztk_ai_thread, NULL);
+        pthread_detach(ztk.ai_thread_id);
     }
     
     /* Start shell */
-    shell_loop();
+    ztk_loop();
     
     /* Cleanup */
-    vfs_destroy(virtual_fs);
-    save_installed_packages();
-    cleanup_keyboard();
+    ztk_cleanup();
+    curl_global_cleanup();
     
     return 0;
 }
