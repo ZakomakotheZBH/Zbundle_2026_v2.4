@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>📺 ZOS StreamOS 4.3 - Next-Gen TV Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300f260'><path d='M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,600;14..32,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  background: #0a0a12;
+  font-family: 'Inter', system-ui, -apple-system, -webkit-system-font;
+  color: #eef5ff;
+  overflow-x: hidden;
+  padding-bottom: 85px;
+  -webkit-text-size-adjust: none;
+}
+:root {
+  --glow-primary: #00f260;
+  --glow-secondary: #0575e6;
+  --taskbar-bg: rgba(8, 8, 18, 0.96);
+}
+.glass-panel {
+  background: rgba(18, 18, 30, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0,242,96,0.2);
+  border-radius: 24px;
+}
+.taskbar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 94%;
+  max-width: 1100px;
+  background: var(--taskbar-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 60px;
+  border: 1px solid rgba(0,242,96,0.4);
+  padding: 6px 12px;
+  display: flex;
+  justify-content: space-around;
+  z-index: 1000;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.taskbar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  color: #aaa;
+  font-size: 0.6rem;
+  cursor: pointer;
+  padding: 12px 20px;
+  min-width: 80px;
+  min-height: 60px;
+  border-radius: 40px;
+  transition: 0.2s;
+}
+.taskbar-item i { font-size: 1.1rem; }
+.taskbar-item:hover, .taskbar-item.active { background: rgba(0,242,96,0.2); color: #00f260; }
+
+*:focus-visible {
+  outline: 3px solid #00f260 !important;
+  outline-offset: 4px;
+  transition: outline 0.2s;
+}
+
+.content-area {
+  padding: 20px 20px 90px 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.panel { display: none; animation: fade 0.2s; }
+.panel.active-panel { display: block; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Windows 8 Start Menu Grid */
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+.start-tile {
+  background: rgba(0,242,96,0.08);
+  border: 1px solid rgba(0,242,96,0.2);
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.3s;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.start-tile:hover {
+  transform: scale(1.05);
+  border-color: #00f260;
+  background: rgba(0,242,96,0.15);
+}
+.start-tile i { font-size: 2.5rem; color: #00f260; margin-bottom: 10px; }
+.start-tile .tile-preview { font-size: 0.75rem; color: #888; margin-top: 8px; }
+
+/* Account Bar */
+.account-bar {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 999;
+  background: rgba(8, 8, 18, 0.9);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0,242,96,0.3);
+  border-radius: 40px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.account-bar:hover { border-color: #00f260; }
+.account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00f260, #0575e6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1rem;
+}
+.account-name { font-size: 0.85rem; }
+.zpoints-badge {
+  background: rgba(255,215,0,0.2);
+  border: 1px solid gold;
+  border-radius: 20px;
+  padding: 2px 12px;
+  font-size: 0.7rem;
+  color: gold;
+}
+
+/* Account Modal */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+}
+.modal.active { display: flex; }
+.modal-content {
+  background: #1a1a2e;
+  border: 1px solid rgba(0,242,96,0.3);
+  border-radius: 24px;
+  padding: 30px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal-content h2 { color: #00f260; margin-bottom: 20px; }
+
+/* User List */
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(0,242,96,0.05);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.user-item:hover { background: rgba(0,242,96,0.15); }
+.user-item .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00f260, #0575e6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+.user-item .info { flex: 1; }
+.user-item .info .name { font-weight: 600; }
+.user-item .info .type { font-size: 0.7rem; color: #888; }
+
+/* Store Items */
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.store-item {
+  background: rgba(0,242,96,0.05);
+  border: 1px solid rgba(0,242,96,0.2);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+.store-item .price {
+  color: gold;
+  font-weight: bold;
+  margin: 8px 0;
+}
+.store-item button {
+  background: #00f260;
+  color: black;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.store-item button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Show Cards */
+.show-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.show-card {
+  background: rgba(0,242,96,0.05);
+  border: 1px solid rgba(0,242,96,0.2);
+  border-radius: 16px;
+  padding: 16px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+.show-card:hover {
+  transform: scale(1.02);
+  border-color: #00f260;
+  background: rgba(0,242,96,0.1);
+}
+.show-card .thumbnail {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #1a1a2e;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+}
+.show-card h4 { margin-bottom: 4px; }
+.show-card .category { color: #888; font-size: 0.8rem; }
+
+button, .btn-sec {
+  background: rgba(0,242,96,0.12);
+  border: 1px solid rgba(0,242,96,0.4);
+  padding: 12px 20px;
+  border-radius: 40px;
+  color: white;
+  cursor: pointer;
+  transition: 0.2s;
+  font-weight: 500;
+  font-size: 1rem;
+}
+button:active { transform: scale(0.97); }
+button:hover { background: #00f260; color: black; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input, textarea, select {
+  background: #1e1e32;
+  border: 1px solid #2a2a44;
+  border-radius: 40px;
+  padding: 12px 18px;
+  color: white;
+  font-size: 1rem;
+  outline: none;
+  width: 100%;
+  margin-bottom: 10px;
+}
+input:focus { border-color: #00f260; }
+
+.video-stage { 
+  background: #000; 
+  border-radius: 24px; 
+  overflow: hidden; 
+  aspect-ratio: 16/9; 
+  margin-bottom: 16px; 
+  position: relative;
+  min-height: 400px;
+}
+.video-stage video, .video-stage iframe { 
+  width: 100%; 
+  height: 100%; 
+  border: none; 
+  object-fit: contain;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.chat-window {
+  background: #0c0c18;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  padding: 40px;
+}
+.chat-window .coming-soon {
+  font-size: 3rem;
+  color: #00f260;
+  margin-bottom: 16px;
+}
+.chat-window .coming-soon-text {
+  font-size: 1.5rem;
+  color: #888;
+}
+
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 20px; }
+
+.category-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.category-filter button {
+  padding: 6px 16px;
+  font-size: 0.8rem;
+  background: rgba(0,242,96,0.05);
+}
+.category-filter button.active {
+  background: #00f260;
+  color: black;
+}
+
+.coming-soon-banner {
+  background: rgba(0,242,96,0.1);
+  border: 2px dashed #00f260;
+  border-radius: 20px;
+  padding: 60px 20px;
+  text-align: center;
+}
+.coming-soon-banner i {
+  font-size: 4rem;
+  color: #00f260;
+  margin-bottom: 16px;
+}
+.coming-soon-banner h2 {
+  font-size: 2rem;
+  color: #00f260;
+  margin-bottom: 8px;
+}
+.coming-soon-banner p {
+  color: #888;
+  font-size: 1.1rem;
+}
+
+.stream-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+  align-items: center;
+}
+.stream-controls input {
+  flex: 1;
+  min-width: 200px;
+}
+
+@media (max-width: 768px) {
+  .taskbar-item span { display: none; }
+  .taskbar-item i { font-size: 1.3rem; }
+  .taskbar-item { padding: 8px; }
+  .start-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .account-bar { font-size: 0.7rem; padding: 4px 12px; }
+  .account-name { display: none; }
+  .show-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .video-stage { min-height: 250px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Account Bar -->
+<div class="account-bar" id="accountBar" onclick="openAccountModal()">
+  <div class="account-avatar" id="currentAvatar">👤</div>
+  <span class="account-name" id="currentUserName">Guest</span>
+  <span class="zpoints-badge">🎫 <span id="zpointsDisplay">0</span></span>
+</div>
+
+<!-- Account Modal -->
+<div class="modal" id="accountModal">
+  <div class="modal-content">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2>👤 Account Management</h2>
+      <button onclick="closeAccountModal()" style="background:none; border:none; font-size:1.5rem; color:white;">✕</button>
+    </div>
+    
+    <div style="margin-bottom:20px;">
+      <h3>Switch User</h3>
+      <div id="userList"></div>
+    </div>
+
+    <div style="margin-bottom:20px; border-top:1px solid #2a2a44; padding-top:20px;">
+      <h3>Create New User</h3>
+      <input type="text" id="newUserName" placeholder="Full Name">
+      <input type="email" id="newUserEmail" placeholder="Email">
+      <input type="password" id="newUserPassword" placeholder="Password">
+      <div style="display:flex; gap:12px; margin-top:10px;">
+        <button onclick="createUser()" style="flex:1;">👤 Create User</button>
+        <button onclick="createKidsAccount()" style="flex:1; background:#ff6b35;">🧒 Kids Account</button>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #2a2a44; padding-top:20px;">
+      <h3>🎫 ZOS Tickets Store</h3>
+      <div style="background:rgba(255,215,0,0.1); padding:12px; border-radius:12px; margin-bottom:12px;">
+        <p>Your Tickets: <strong id="zpointsStoreDisplay">0</strong></p>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input type="text" id="zpointsCode" placeholder="Enter ZOS Ticket code">
+          <button onclick="redeemZpoints()">Redeem</button>
+        </div>
+      </div>
+      <div class="store-grid" id="storeItems"></div>
+    </div>
+
+    <div style="border-top:1px solid #2a2a44; padding-top:20px; margin-top:20px;">
+      <h3>🎨 Customize Profile</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <input type="text" id="profileEmoji" placeholder="Avatar emoji (e.g., 🦄)" style="flex:1;">
+        <input type="text" id="profileBg" placeholder="Background color (e.g., #ff6b35)" style="flex:1;">
+        <button onclick="updateProfile()">Update Profile</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Taskbar -->
+<div class="taskbar">
+  <button class="taskbar-item active" data-panel="home"><i class="fa-solid fa-home"></i><span>Home</span></button>
+  <button class="taskbar-item" data-panel="player"><i class="fa-solid fa-play"></i><span>Stream</span></button>
+  <button class="taskbar-item" data-panel="airplay"><i class="fa-brands fa-apple"></i><span>AirPlay</span></button>
+  <button class="taskbar-item" data-panel="games"><i class="fa-solid fa-gamepad"></i><span>Games</span></button>
+  <button class="taskbar-item" data-panel="apps"><i class="fa-solid fa-cube"></i><span>Apps</span></button>
+  <button class="taskbar-item" data-panel="broadcast"><i class="fa-solid fa-globe"></i><span>Broadcast</span></button>
+  <button class="taskbar-item" data-panel="lanchat"><i class="fa-solid fa-wifi"></i><span>Chat</span></button>
+  <button class="taskbar-item" data-panel="channels"><i class="fa-solid fa-folder"></i><span>Media</span></button>
+  <button class="taskbar-item" data-panel="developer"><i class="fa-solid fa-code"></i><span>Dev</span></button>
+</div>
+
+<div class="content-area">
+  
+  <!-- HOME / START MENU -->
+  <div id="home" class="panel active-panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h2 style="margin-bottom:20px;">🏠 Welcome to ZOS StreamOS 4.3</h2>
+      
+      <!-- Featured Shows -->
+      <h3 style="margin:20px 0 12px;">🔥 Popular Shows</h3>
+      <div class="show-grid" id="featuredShows"></div>
+      
+      <h3 style="margin:20px 0 12px;">📱 Quick Launch</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px;">
+        <div class="start-tile" onclick="switchPanel('player')">
+          <i class="fa-solid fa-play"></i>
+          <h4>Stream TV</h4>
+          <div class="tile-preview">Watch live content</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('games')">
+          <i class="fa-solid fa-gamepad"></i>
+          <h4>Games</h4>
+          <div class="tile-preview">Play interactive games</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('apps')">
+          <i class="fa-solid fa-cube"></i>
+          <h4>Mini Apps</h4>
+          <div class="tile-preview">Calculator, Whiteboard & more</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('lanchat')">
+          <i class="fa-solid fa-comments"></i>
+          <h4>P2P Chat</h4>
+          <div class="tile-preview">Coming Soon!</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('airplay')">
+          <i class="fa-brands fa-apple"></i>
+          <h4>AirPlay</h4>
+          <div class="tile-preview">Cast to your TV</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('broadcast')">
+          <i class="fa-solid fa-globe"></i>
+          <h4>Broadcast</h4>
+          <div class="tile-preview">Share your stream</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('channels')">
+          <i class="fa-solid fa-folder"></i>
+          <h4>Media Library</h4>
+          <div class="tile-preview">Your uploaded content</div>
+        </div>
+        <div class="start-tile" onclick="openAccountModal()">
+          <i class="fa-solid fa-user"></i>
+          <h4>Account</h4>
+          <div class="tile-preview">Manage profile & Tickets</div>
+        </div>
+        <div class="start-tile" onclick="switchPanel('developer')">
+          <i class="fa-solid fa-code"></i>
+          <h4>Dev Console</h4>
+          <div class="tile-preview">Run custom code</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STREAM PLAYER -->
+  <div id="player" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3><i class="fa-solid fa-broadcast-tower"></i> Universal Stream Player</h3>
+      
+      <!-- Show Categories -->
+      <div class="category-filter" id="categoryFilter">
+        <button class="active" data-category="all">All</button>
+        <button data-category="stem">🔬 STEM</button>
+        <button data-category="music">🎵 Music</button>
+        <button data-category="art">🎨 Art</button>
+        <button data-category="gym">💪 Gym</button>
+        <button data-category="reacting">😮 Reacting</button>
+        <button data-category="space">🚀 Space</button>
+        <button data-category="gaming">🎮 Gaming</button>
+        <button data-category="education">📚 Education</button>
+        <button data-category="comedy">😂 Comedy</button>
+      </div>
+      
+      <!-- Video Stage -->
+      <div class="video-stage" id="videoStage">
+        <div style="display:flex; height:100%; align-items:center; justify-content:center; flex-direction:column; background:#0a0a1a;">
+          <i class="fa-solid fa-play-circle" style="font-size:4rem; color:#00f260;"></i>
+          <p style="margin-top:10px;">Select a show below or enter any URL</p>
+        </div>
+      </div>
+      
+      <!-- Stream Controls -->
+      <div class="stream-controls">
+        <input type="text" id="streamUrl" placeholder="Or enter any URL..." value="https://www.youtube.com/embed/dQw4w9WgXcQ">
+        <button id="playMediaBtn"><i class="fa-regular fa-circle-play"></i> Play</button>
+      </div>
+      
+      <!-- Shows Grid -->
+      <div class="show-grid" id="showsGrid"></div>
+    </div>
+  </div>
+
+  <!-- AIRPLAY -->
+  <div id="airplay" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3><i class="fa-brands fa-apple"></i> AirPlay Casting</h3>
+      <div style="background:#0575e622; border-left:3px solid #0575e6; padding:12px; border-radius:12px; margin-bottom:16px;">
+        <i class="fa-solid fa-info-circle"></i> <strong>AirPlay on iPad</strong><br>
+        • Tap the <i class="fa-brands fa-apple"></i> <strong>AirPlay button</strong> on any video to cast<br>
+        • For best results, use MP4 videos or YouTube links
+      </div>
+      <button id="testAirPlayBtn" style="background:#0575e6; border-color:#0575e6;">
+        <i class="fa-brands fa-apple"></i> Test AirPlay Video
+      </button>
+      <button id="mirrorScreenAirPlayBtn" style="margin-left:12px;">
+        <i class="fa-solid fa-desktop"></i> Screen Mirror via AirPlay
+      </button>
+    </div>
+  </div>
+
+  <!-- GAMES -->
+  <div id="games" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3><i class="fa-solid fa-gamepad"></i> Live Games</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:12px;">
+        <div class="start-tile" data-game="kahoot"><i class="fa-solid fa-chalkboard-user"></i><h4>Kahoot! Live</h4></div>
+        <div class="start-tile" data-game="blooket"><i class="fa-solid fa-crown"></i><h4>Blooket</h4></div>
+        <div class="start-tile" data-game="quizizz"><i class="fa-solid fa-question-circle"></i><h4>Quizizz</h4></div>
+        <div class="start-tile" data-game="gimkit"><i class="fa-solid fa-bolt"></i><h4>Gimkit</h4></div>
+      </div>
+      <div id="gameEmbedContainer" style="margin-top:20px; display:none;">
+        <iframe id="gameIframe" style="width:100%; height:500px; border-radius:20px; border:none;"></iframe>
+        <button id="closeGameBtn" style="margin-top:12px;">Close Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPS -->
+  <div id="apps" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3><i class="fa-solid fa-cube"></i> Mini Apps</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:12px;">
+        <div class="start-tile" data-app="calculator"><i class="fa-solid fa-calculator"></i><h4>Calculator</h4></div>
+        <div class="start-tile" data-app="whiteboard"><i class="fa-solid fa-paintbrush"></i><h4>Whiteboard</h4></div>
+        <div class="start-tile" data-app="timer"><i class="fa-solid fa-hourglass-half"></i><h4>Timer</h4></div>
+        <div class="start-tile" data-app="notes"><i class="fa-solid fa-note-sticky"></i><h4>Notes</h4></div>
+      </div>
+      <div id="miniAppContainer" style="margin-top:20px; min-height:300px; background:#0f0f1a; border-radius:20px; padding:16px; display:none;">
+        <div id="appContent"></div>
+        <button id="closeAppBtn" style="margin-top:12px;">Close App</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BROADCAST -->
+  <div id="broadcast" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3><i class="fa-solid fa-globe"></i> IP Broadcast</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+        <input type="text" id="ipStreamUrl" placeholder="http://your-ip:8080/stream" style="flex:1;">
+        <button id="addBroadcastUrlBtn">Add Source</button>
+      </div>
+      <div id="broadcastUrlsList"></div>
+      <div style="background:#0f0f1a; border-radius:20px; padding:16px; margin-top:16px;">
+        <h4>🌐 Local IP</h4>
+        <div id="localIpDisplay" style="background:#1e1e32; padding:8px 16px; border-radius:20px; display:inline-block;">Detecting...</div>
+        <button id="copyIpBtn" style="margin-left:12px;">Copy IP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- P2P CHAT - COMING SOON -->
+  <div id="lanchat" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3><i class="fa-solid fa-comments"></i> P2P Chat</h3>
+      <div class="coming-soon-banner">
+        <i class="fa-solid fa-clock"></i>
+        <h2>🚀 Coming Soon!</h2>
+        <p>P2P Chat is currently in development</p>
+        <p style="font-size:0.9rem; margin-top:8px; color:#666;">Stay tuned for real-time peer-to-peer messaging</p>
+        <div style="margin-top:20px; display:flex; gap:12px; justify-content:center;">
+          <span style="background:rgba(0,242,96,0.1); padding:8px 16px; border-radius:20px; border:1px solid rgba(0,242,96,0.2);">🔜 Q4 2024</span>
+          <span style="background:rgba(0,242,96,0.1); padding:8px 16px; border-radius:20px; border:1px solid rgba(0,242,96,0.2);">💡 P2P & Group Chat</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEDIA -->
+  <div id="channels" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3>📁 Media Library</h3>
+      <div id="channelVideos" class="video-grid"></div>
+      <input type="file" id="uploadFile" accept="video/*" style="margin-top:12px;">
+      <button id="uploadToChannelBtn">Upload to Library</button>
+    </div>
+  </div>
+
+  <!-- DEV -->
+  <div id="developer" class="panel">
+    <div class="glass-panel" style="padding:20px;">
+      <h3>🛠️ Dev Console</h3>
+      <textarea id="codeArea" rows="6" placeholder="Run custom JS code..." style="width:100%; font-family:monospace; background:#0a0a0f; border-radius:12px; padding:12px; color:white; border:1px solid #2a2a44;"></textarea>
+      <button id="runCodeBtn" style="margin-top:12px;">Run</button>
+      <div id="devOutput" style="background:#0a0a0f; border-radius:12px; padding:16px; margin-top:12px; font-family:monospace;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== EASY TO EDIT SHOWS CONFIGURATION ====================
+// Add or remove shows here! Each show needs: id, title, category, embedUrl, icon
+// Categories: stem, music, art, gym, reacting, space, gaming, education, comedy
+
+const SHOWS_CONFIG = [
+  // STEM
+  { id: 'stem1', title: 'Mark Rober - Science Experiments', category: 'stem', embedUrl: 'https://www.youtube.com/embed/9vK3VcV4YkQ', icon: '🔬' },
+  { id: 'stem2', title: 'Vsauce - Mind Field', category: 'stem', embedUrl: 'https://www.youtube.com/embed/1Xp_4O5L9X0', icon: '🧠' },
+  { id: 'stem3', title: 'SmarterEveryDay - Physics', category: 'stem', embedUrl: 'https://www.youtube.com/embed/8MtyUjX0ZtU', icon: '⚛️' },
+  { id: 'stem4', title: 'Kurzgesagt - Science Videos', category: 'stem', embedUrl: 'https://www.youtube.com/embed/5J6j_1f1X0E', icon: '🌌' },
+  
+  // Music
+  { id: 'music1', title: 'Piano Cover - Interstellar', category: 'music', embedUrl: 'https://www.youtube.com/embed/PqM9z_B0_hE', icon: '🎹' },
+  { id: 'music2', title: 'Epic Orchestral Mix', category: 'music', embedUrl: 'https://www.youtube.com/embed/4ZxZ-yX8xX4', icon: '🎻' },
+  { id: 'music3', title: 'Lo-Fi Beats to Relax', category: 'music', embedUrl: 'https://www.youtube.com/embed/5qap5aO4i9A', icon: '🎧' },
+  { id: 'music4', title: 'Guitar Masterclass', category: 'music', embedUrl: 'https://www.youtube.com/embed/GXQ91fj0PqM', icon: '🎸' },
+  
+  // Art
+  { id: 'art1', title: 'Bob Ross - Painting Joy', category: 'art', embedUrl: 'https://www.youtube.com/embed/oh5p5f5_2a0', icon: '🎨' },
+  { id: 'art2', title: 'Digital Art Speedpaint', category: 'art', embedUrl: 'https://www.youtube.com/embed/MpDqVXqk8vA', icon: '🖌️' },
+  { id: 'art3', title: 'Sculpture Masterclass', category: 'art', embedUrl: 'https://www.youtube.com/embed/9vK3VcV4YkQ', icon: '🗿' },
+  { id: 'art4', title: 'Calligraphy Tutorial', category: 'art', embedUrl: 'https://www.youtube.com/embed/1Xp_4O5L9X0', icon: '✍️' },
+  
+  // Gym
+  { id: 'gym1', title: 'Home Workout - No Equipment', category: 'gym', embedUrl: 'https://www.youtube.com/embed/8MtyUjX0ZtU', icon: '💪' },
+  { id: 'gym2', title: 'Yoga for Beginners', category: 'gym', embedUrl: 'https://www.youtube.com/embed/5J6j_1f1X0E', icon: '🧘' },
+  { id: 'gym3', title: 'HIIT Cardio Blast', category: 'gym', embedUrl: 'https://www.youtube.com/embed/9vK3VcV4YkQ', icon: '🏋️' },
+  { id: 'gym4', title: 'Stretching & Mobility', category: 'gym', embedUrl: 'https://www.youtube.com/embed/1Xp_4O5L9X0', icon: '🤸' },
+  
+  // Reacting
+  { id: 'react1', title: 'Try Not to Laugh Challenge', category: 'reacting', embedUrl: 'https://www.youtube.com/embed/4ZxZ-yX8xX4', icon: '😂' },
+  { id: 'react2', title: 'Reacting to 90s Nostalgia', category: 'reacting', embedUrl: 'https://www.youtube.com/embed/PqM9z_B0_hE', icon: '📺' },
+  { id: 'react3', title: 'Cooking Reaction Videos', category: 'reacting', embedUrl: 'https://www.youtube.com/embed/5qap5aO4i9A', icon: '🍳' },
+  { id: 'react4', title: 'Epic Moments Reaction', category: 'reacting', embedUrl: 'https://www.youtube.com/embed/GXQ91fj0PqM', icon: '😱' },
+  
+  // Space
+  { id: 'space1', title: 'NASA - Journey to Mars', category: 'space', embedUrl: 'https://www.youtube.com/embed/5J6j_1f1X0E', icon: '🚀' },
+  { id: 'space2', title: 'Hubble Telescope Discoveries', category: 'space', embedUrl: 'https://www.youtube.com/embed/8MtyUjX0ZtU', icon: '🔭' },
+  { id: 'space3', title: 'Black Holes Explained', category: 'space', embedUrl: 'https://www.youtube.com/embed/9vK3VcV4YkQ', icon: '⚫' },
+  { id: 'space4', title: 'International Space Station', category: 'space', embedUrl: 'https://www.youtube.com/embed/1Xp_4O5L9X0', icon: '🛰️' },
+  
+  // Gaming
+  { id: 'gaming1', title: 'Minecraft Hardcore Playthrough', category: 'gaming', embedUrl: 'https://www.youtube.com/embed/4ZxZ-yX8xX4', icon: '⛏️' },
+  { id: 'gaming2', title: 'Fortnite Competitive Highlights', category: 'gaming', embedUrl: 'https://www.youtube.com/embed/PqM9z_B0_hE', icon: '🎯' },
+  { id: 'gaming3', title: 'Valorant Pro Tips', category: 'gaming', embedUrl: 'https://www.youtube.com/embed/5qap5aO4i9A', icon: '🎮' },
+  { id: 'gaming4', title: 'Indie Games Showcase', category: 'gaming', embedUrl: 'https://www.youtube.com/embed/GXQ91fj0PqM', icon: '🕹️' },
+  
+  // Education
+  { id: 'edu1', title: 'History of Ancient Civilizations', category: 'education', embedUrl: 'https://www.youtube.com/embed/8MtyUjX0ZtU', icon: '🏛️' },
+  { id: 'edu2', title: 'Learn French - Beginner', category: 'education', embedUrl: 'https://www.youtube.com/embed/5J6j_1f1X0E', icon: '🇫🇷' },
+  { id: 'edu3', title: 'World Geography Explained', category: 'education', embedUrl: 'https://www.youtube.com/embed/9vK3VcV4YkQ', icon: '🌍' },
+  { id: 'edu4', title: 'Financial Literacy 101', category: 'education', embedUrl: 'https://www.youtube.com/embed/1Xp_4O5L9X0', icon: '💰' },
+  
+  // Comedy
+  { id: 'comedy1', title: 'Stand Up Comedy Special', category: 'comedy', embedUrl: 'https://www.youtube.com/embed/4ZxZ-yX8xX4', icon: '🎤' },
+  { id: 'comedy2', title: 'Sketch Comedy Show', category: 'comedy', embedUrl: 'https://www.youtube.com/embed/PqM9z_B0_hE', icon: '🎭' },
+  { id: 'comedy3', title: 'Prank Videos Compilation', category: 'comedy', embedUrl: 'https://www.youtube.com/embed/5qap5aO4i9A', icon: '🤡' },
+  { id: 'comedy4', title: 'Roasts and Clapbacks', category: 'comedy', embedUrl: 'https://www.youtube.com/embed/GXQ91fj0PqM', icon: '🔥' }
+];
+
+// ==================== ZOS TICKET CODES (ONLY GENERATED BY SYSTEM) ====================
+// No default codes - codes are only created when users earn them
+const ZOS_CODES = {};
+
+// ==================== USER SYSTEM ====================
+let currentUser = null;
+let users = JSON.parse(localStorage.getItem('zosUsers')) || {
+  guest: {
+    id: 'guest',
+    name: 'Guest',
+    email: 'guest@zos.com',
+    type: 'guest',
+    avatar: '👤',
+    bgColor: '#1a1a2e',
+    zpoints: 0,
+    purchases: [],
+    parent: null,
+    sportsTeams: []
+  }
+};
+
+function getCurrentUser() {
+  const saved = localStorage.getItem('zosCurrentUser');
+  if (saved && users[saved]) return users[saved];
+  return users.guest;
+}
+
+function saveUsers() {
+  localStorage.setItem('zosUsers', JSON.stringify(users));
+  localStorage.setItem('zosCurrentUser', currentUser?.id || 'guest');
+  updateUI();
+}
+
+function updateUI() {
+  const user = getCurrentUser();
+  document.getElementById('currentUserName').textContent = user.name;
+  document.getElementById('currentAvatar').textContent = user.avatar || '👤';
+  document.getElementById('zpointsDisplay').textContent = user.zpoints || 0;
+  document.getElementById('zpointsStoreDisplay').textContent = user.zpoints || 0;
+  renderUserList();
+  renderStore();
+}
+
+function openAccountModal() {
+  document.getElementById('accountModal').classList.add('active');
+  renderUserList();
+  renderStore();
+  updateUI();
+}
+
+function closeAccountModal() {
+  document.getElementById('accountModal').classList.remove('active');
+}
+
+function renderUserList() {
+  const container = document.getElementById('userList');
+  container.innerHTML = '';
+  Object.values(users).forEach(user => {
+    const div = document.createElement('div');
+    div.className = 'user-item';
+    div.innerHTML = `
+      <div class="avatar" style="background:${user.bgColor || 'linear-gradient(135deg, #00f260, #0575e6)'}">${user.avatar || '👤'}</div>
+      <div class="info">
+        <div class="name">${user.name} ${user.type === 'kids' ? '🧒' : ''}</div>
+        <div class="type">${user.type === 'kids' ? 'Kids Account' : user.type === 'guest' ? 'Guest' : 'Standard'} • 🎫${user.zpoints || 0}</div>
+      </div>
+      <button onclick="switchUser('${user.id}')" style="padding:4px 12px; font-size:0.8rem;">Switch</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function switchUser(userId) {
+  if (users[userId]) {
+    currentUser = users[userId];
+    localStorage.setItem('zosCurrentUser', userId);
+    updateUI();
+    closeAccountModal();
+  }
+}
+
+function createUser() {
+  const name = document.getElementById('newUserName').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value.trim();
+  if (!name || !email || !password) {
+    alert('Please fill in all fields');
+    return;
+  }
+  const id = 'user_' + Date.now();
+  users[id] = {
+    id,
+    name,
+    email,
+    password,
+    type: 'standard',
+    avatar: '👤',
+    bgColor: '#1a1a2e',
+    zpoints: 100,
+    purchases: [],
+    parent: null,
+    sportsTeams: []
+  };
+  saveUsers();
+  switchUser(id);
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserEmail').value = '';
+  document.getElementById('newUserPassword').value = '';
+  alert('✅ User created! You got 100 ZOS Tickets as a welcome bonus!');
+}
+
+function createKidsAccount() {
+  const name = document.getElementById('newUserName').value.trim();
+  const password = document.getElementById('newUserPassword').value.trim();
+  if (!name || !password) {
+    alert('Please fill in name and password');
+    return;
+  }
+  const parent = getCurrentUser();
+  const id = 'kids_' + Date.now();
+  users[id] = {
+    id,
+    name: '🧒 ' + name,
+    email: name + '@kids.zos',
+    password,
+    type: 'kids',
+    avatar: '🧒',
+    bgColor: '#ff6b35',
+    zpoints: 50,
+    purchases: [],
+    parent: parent.id,
+    sportsTeams: []
+  };
+  saveUsers();
+  switchUser(id);
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPassword').value = '';
+  alert('🧒 Kids account created! Parental controls active!');
+}
+
+function updateProfile() {
+  const user = getCurrentUser();
+  const emoji = document.getElementById('profileEmoji').value.trim();
+  const bg = document.getElementById('profileBg').value.trim();
+  if (emoji) user.avatar = emoji;
+  if (bg) user.bgColor = bg;
+  saveUsers();
+  updateUI();
+  alert('✅ Profile updated!');
+}
+
+// ==================== ZOS TICKETS SYSTEM ====================
+function redeemZpoints() {
+  const code = document.getElementById('zpointsCode').value.trim();
+  if (!code) {
+    alert('Please enter a ZOS Ticket code');
+    return;
+  }
+  
+  if (ZOS_CODES[code]) {
+    const user = getCurrentUser();
+    user.zpoints = (user.zpoints || 0) + ZOS_CODES[code];
+    delete ZOS_CODES[code]; // Code can only be used once
+    saveUsers();
+    updateUI();
+    document.getElementById('zpointsCode').value = '';
+    alert(`✅ Redeemed ${ZOS_CODES[code] || 0} ZOS Tickets! Total: ${user.zpoints}`);
+  } else {
+    alert('❌ Invalid or already used code. Codes are generated when you earn tickets!');
+  }
+}
+
+// Function to generate a new ticket code (called when user earns tickets)
+function generateTicketCode(amount) {
+  const code = 'ZOS' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  ZOS_CODES[code] = amount;
+  localStorage.setItem('zosCodes', JSON.stringify(ZOS_CODES));
+  return code;
+}
+
+// Load saved codes
+const savedCodes = JSON.parse(localStorage.getItem('zosCodes') || '{}');
+Object.assign(ZOS_CODES, savedCodes);
+
+// ==================== STORE ====================
+const storeItems = [
+  { id: 'show1', name: '🎬 Premium Show Pack', price: 200, type: 'show' },
+  { id: 'show2', name: '🎭 Comedy Special', price: 150, type: 'show' },
+  { id: 'font1', name: '🎨 Neon Font Pack', price: 50, type: 'font' },
+  { id: 'font2', name: '🎨 Retro Font Pack', price: 50, type: 'font' },
+  { id: 'pass1', name: '🔓 Parental Pass', price: 300, type: 'pass' },
+  // Actual Sports Teams
+  { id: 'sport1', name: '🏆 LA Galaxy - Soccer', price: 100, type: 'sport', team: 'LA Galaxy' },
+  { id: 'sport2', name: '🏀 LA Lakers - Basketball', price: 100, type: 'sport', team: 'LA Lakers' },
+  { id: 'sport3', name: '⚾ NY Yankees - Baseball', price: 100, type: 'sport', team: 'NY Yankees' },
+  { id: 'sport4', name: '🏈 Dallas Cowboys - Football', price: 100, type: 'sport', team: 'Dallas Cowboys' },
+  { id: 'sport5', name: '🏒 Toronto Maple Leafs - Hockey', price: 100, type: 'sport', team: 'Maple Leafs' },
+  { id: 'sport6', name: '⚽ Manchester United - Soccer', price: 100, type: 'sport', team: 'Man United' },
+];
+
+function renderStore() {
+  const container = document.getElementById('storeItems');
+  const user = getCurrentUser();
+  container.innerHTML = '';
+  storeItems.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'store-item';
+    const owned = user.purchases?.includes(item.id);
+    div.innerHTML = `
+      <div style="font-size:2rem;">${item.name.split(' ')[0]}</div>
+      <div style="font-size:0.9rem; margin:8px 0;">${item.name}</div>
+      <div class="price">🎫 ${item.price}</div>
+      <button onclick="purchaseItem('${item.id}')" ${owned ? 'disabled' : ''}>
+        ${owned ? '✅ Owned' : 'Buy'}
+      </button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function purchaseItem(itemId) {
+  const user = getCurrentUser();
+  const item = storeItems.find(i => i.id === itemId);
+  if (!item) return;
+  if (user.zpoints < item.price) {
+    alert(`❌ Not enough Tickets! Need ${item.price}, have ${user.zpoints}`);
+    return;
+  }
+  if (user.purchases?.includes(itemId)) {
+    alert('You already own this!');
+    return;
+  }
+  user.zpoints -= item.price;
+  if (!user.purchases) user.purchases = [];
+  user.purchases.push(itemId);
+  
+  // Track sports teams
+  if (item.type === 'sport' && item.team) {
+    if (!user.sportsTeams) user.sportsTeams = [];
+    user.sportsTeams.push(item.team);
+  }
+  
+  saveUsers();
+  updateUI();
+  renderStore();
+  
+  if (item.type === 'show') {
+    alert(`🎬 Purchased: ${item.name}\nLoad it in the Stream player!`);
+  } else if (item.type === 'pass') {
+    alert('🔓 Parental Pass activated! You can now bypass parental controls!');
+  } else if (item.type === 'sport') {
+    alert(`🏆 You're now a supporter of ${item.team}! Wear your digital merch with pride!`);
+  } else if (item.type === 'font') {
+    alert(`🎨 Font purchased! Go to settings to apply it.`);
+  }
+}
+
+// ==================== SHOWS DISPLAY ====================
+function renderShows(category = 'all') {
+  const container = document.getElementById('showsGrid');
+  const filtered = category === 'all' ? SHOWS_CONFIG : SHOWS_CONFIG.filter(s => s.category === category);
+  
+  container.innerHTML = '';
+  filtered.forEach(show => {
+    const card = document.createElement('div');
+    card.className = 'show-card';
+    card.innerHTML = `
+      <div class="thumbnail">${show.icon}</div>
+      <h4>${show.title}</h4>
+      <div class="category">${show.category.toUpperCase()}</div>
+    `;
+    card.onclick = () => playShow(show);
+    container.appendChild(card);
+  });
+}
+
+function renderFeaturedShows() {
+  const container = document.getElementById('featuredShows');
+  const featured = SHOWS_CONFIG.slice(0, 6);
+  container.innerHTML = '';
+  featured.forEach(show => {
+    const card = document.createElement('div');
+    card.className = 'show-card';
+    card.innerHTML = `
+      <div class="thumbnail">${show.icon}</div>
+      <h4>${show.title}</h4>
+      <div class="category">${show.category.toUpperCase()}</div>
+    `;
+    card.onclick = () => {
+      switchPanel('player');
+      playShow(show);
+    };
+    container.appendChild(card);
+  });
+}
+
+function playShow(show) {
+  const stage = document.getElementById('videoStage');
+  stage.innerHTML = `
+    <iframe src="${show.embedUrl}?autoplay=1&playsinline=1" 
+      style="width:100%; height:100%; border:none; position:absolute; top:0; left:0;" 
+      allow="autoplay; fullscreen; picture-in-picture" 
+      allowfullscreen>
+    </iframe>
+  `;
+  document.getElementById('streamUrl').value = show.embedUrl;
+}
+
+// ==================== CATEGORY FILTER ====================
+document.querySelectorAll('.category-filter button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.category-filter button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderShows(btn.dataset.category);
+  };
+});
+
+// ==================== NAVIGATION ====================
+function switchPanel(panelId) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active-panel'));
+  const panel = document.getElementById(panelId);
+  if (panel) panel.classList.add('active-panel');
+  document.querySelectorAll('.taskbar-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.panel === panelId);
+  });
+  
+  // Refresh content on switch
+  if (panelId === 'player') renderShows('all');
+}
+
+document.querySelectorAll('.taskbar-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    switchPanel(btn.dataset.panel);
+  });
+});
+
+// ==================== STREAM PLAYER ====================
+function loadMedia(url) {
+  if (!url) return;
+  const stage = document.getElementById('videoStage');
+  stage.innerHTML = '';
+  
+  if (url.includes('youtube.com/watch') || url.includes('youtu.be/')) {
+    const vid = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/)?.[1];
+    if (vid) {
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1`;
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+      iframe.allowFullscreen = true;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = 'none';
+      iframe.style.position = 'absolute';
+      iframe.style.top = '0';
+      iframe.style.left = '0';
+      stage.appendChild(iframe);
+    }
+  } else {
+    const video = document.createElement('video');
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.position = 'absolute';
+    video.style.top = '0';
+    video.style.left = '0';
+    video.src = url;
+    stage.appendChild(video);
+  }
+}
+
+document.getElementById('playMediaBtn').onclick = () => {
+  loadMedia(document.getElementById('streamUrl').value);
+};
+
+// ==================== AIRPLAY ====================
+document.getElementById('testAirPlayBtn').onclick = () => {
+  const stage = document.getElementById('videoStage');
+  stage.innerHTML = '';
+  const video = document.createElement('video');
+  video.controls = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.style.width = '100%';
+  video.style.height = '100%';
+  video.style.position = 'absolute';
+  video.style.top = '0';
+  video.style.left = '0';
+  video.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+  stage.appendChild(video);
+  setTimeout(() => {
+    if (video.webkitShowPlaybackTargetPicker) {
+      video.webkitShowPlaybackTargetPicker();
+    } else {
+      alert('Tap the AirPlay icon in the video player!');
+    }
+  }, 500);
+};
+
+document.getElementById('mirrorScreenAirPlayBtn').onclick = () => {
+  alert('📱 To mirror your screen:\n\n1. Swipe down from top-right\n2. Tap "Screen Mirroring"\n3. Select your TV');
+};
+
+// ==================== GAMES ====================
+const gameUrls = {
+  kahoot: 'https://kahoot.it/',
+  blooket: 'https://play.blooket.com/play',
+  quizizz: 'https://quizizz.com/join',
+  gimkit: 'https://www.gimkit.com/join'
+};
+
+document.querySelectorAll('.start-tile[data-game]').forEach(card => {
+  card.onclick = () => {
+    const game = card.dataset.game;
+    document.getElementById('gameEmbedContainer').style.display = 'block';
+    document.getElementById('gameIframe').src = gameUrls[game];
+  };
+});
+
+document.getElementById('closeGameBtn').onclick = () => {
+  document.getElementById('gameEmbedContainer').style.display = 'none';
+  document.getElementById('gameIframe').src = '';
+};
+
+// ==================== APPS ====================
+const apps = {
+  calculator: `<div style="padding:20px;">
+    <input type="text" id="calcDisplay" readonly style="width:100%; text-align:right; font-size:1.5rem;">
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px;">
+      ${[7,8,9,'/',4,5,6,'*',1,2,3,'-',0,'.','=','+'].map(b => 
+        `<button onclick="document.getElementById('calcDisplay').value+='${b}'" style="padding:12px;">${b}</button>`
+      ).join('')}
+      <button onclick="document.getElementById('calcDisplay').value=''" style="grid-column:span 4;">Clear</button>
+    </div>
+  </div>`,
+  whiteboard: `<canvas id="miniCanvas" width="500" height="300" style="width:100%; background:white; border-radius:12px; cursor:crosshair;"></canvas>
+    <button onclick="clearCanvas()" style="margin-top:8px;">Clear</button>
+    <script>
+      let drawing=false; const c=document.getElementById('miniCanvas'); const ctx=c.getContext('2d');
+      c.width=500; c.height=300; ctx.fillStyle='white'; ctx.fillRect(0,0,500,300);
+      ctx.strokeStyle='#00f260'; ctx.lineWidth=3;
+      c.addEventListener('mousedown',(e)=>{drawing=true; ctx.beginPath(); ctx.moveTo(e.offsetX,e.offsetY);});
+      c.addEventListener('mouseup',()=>drawing=false);
+      c.addEventListener('mousemove',(e)=>{if(drawing){ctx.lineTo(e.offsetX,e.offsetY); ctx.stroke(); ctx.beginPath(); ctx.moveTo(e.offsetX,e.offsetY);}});
+      function clearCanvas(){ctx.fillStyle='white';ctx.fillRect(0,0,500,300);ctx.beginPath();}
+    <\/script>`,
+  timer: `<div><h4>Timer</h4><input type="number" id="timerSeconds" placeholder="Seconds"><button onclick="startTimer()">Start</button>
+    <div id="timerDisplay" style="font-size:2rem; margin-top:12px;">0:00</div>
+    <script>
+      let timerInt; function startTimer(){
+        let sec=parseInt(document.getElementById('timerSeconds').value);
+        let display=document.getElementById('timerDisplay');
+        if(timerInt) clearInterval(timerInt);
+        timerInt=setInterval(()=>{if(sec<=0){clearInterval(timerInt);display.innerText='Done!';}
+        else{let m=Math.floor(sec/60);let s=sec%60;display.innerText=m+':'+(s<10?'0'+s:s);sec--;}},1000);
+      }
+    <\/script>`,
+  notes: `<textarea id="sharedNotes" rows="8" style="width:100%; border-radius:12px; background:#1e1e32; color:white; padding:12px;" placeholder="Shared notes..."></textarea>
+    <button onclick="alert('📝 Notes saved locally!')">Save Notes</button>`
+};
+
+document.querySelectorAll('.start-tile[data-app]').forEach(card => {
+  card.onclick = () => {
+    const app = card.dataset.app;
+    const container = document.getElementById('miniAppContainer');
+    container.style.display = 'block';
+    document.getElementById('appContent').innerHTML = apps[app] || '<p>App loading...</p>';
+  };
+});
+
+document.getElementById('closeAppBtn').onclick = () => {
+  document.getElementById('miniAppContainer').style.display = 'none';
+};
+
+// ==================== BROADCAST ====================
+async function getLocalIP() {
+  try {
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    pc.createDataChannel('');
+    pc.createOffer().then(offer => pc.setLocalDescription(offer));
+    pc.onicecandidate = (e) => {
+      if(e.candidate) {
+        const ip = e.candidate.candidate.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/)?.[0];
+        if(ip && !ip.startsWith('0.0')) {
+          document.getElementById('localIpDisplay').innerHTML = `🌐 Your IP: ${ip}`;
+          pc.close();
+        }
+      }
+    };
+    setTimeout(() => pc.close(), 3000);
+  } catch(e) {
+    document.getElementById('localIpDisplay').innerHTML = 'IP detection available';
+  }
+}
+getLocalIP();
+
+document.getElementById('copyIpBtn').onclick = () => {
+  const ipText = document.getElementById('localIpDisplay').innerText.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/)?.[0];
+  if(ipText) { navigator.clipboard.writeText(ipText); alert('IP copied!'); }
+};
+
+let broadcastUrls = [];
+function renderBroadcastUrls() {
+  const container = document.getElementById('broadcastUrlsList');
+  container.innerHTML = broadcastUrls.map((url,i) => `
+    <div style="background:#0f0f1a; padding:12px; border-radius:16px; margin-bottom:8px; display:flex; justify-content:space-between;">
+      <span>${url}</span>
+      <div><button onclick="loadMedia('${url}')">Play</button> <button onclick="removeUrl(${i})">Remove</button></div>
+    </div>
+  `).join('');
+}
+window.removeUrl = (i) => { broadcastUrls.splice(i,1); renderBroadcastUrls(); };
+document.getElementById('addBroadcastUrlBtn').onclick = () => {
+  const url = document.getElementById('ipStreamUrl').value.trim();
+  if(url) { broadcastUrls.push(url); renderBroadcastUrls(); document.getElementById('ipStreamUrl').value=''; }
+};
+
+// ==================== MEDIA LIBRARY ====================
+let channels = JSON.parse(localStorage.getItem('tvChannels')) || { "default": { name: "General", videos: [] } };
+
+function showChannelVideos() {
+  const videosDiv = document.getElementById('channelVideos');
+  videosDiv.innerHTML = '';
+  (channels['default']?.videos || []).forEach(v => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#0f0f1c; border-radius:20px; padding:16px; border:1px solid #2a2a44;';
+    card.innerHTML = `
+      <video src="${v.dataUrl}" controls style="width:100%; border-radius:12px;"></video>
+      <div style="margin-top:8px; font-size:0.9rem;">${v.name}</div>
+    `;
+    videosDiv.appendChild(card);
+  });
+}
+
+document.getElementById('uploadToChannelBtn').onclick = () => {
+  const file = document.getElementById('uploadFile').files[0];
+  if(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      channels['default'].videos.push({ name: file.name, dataUrl: e.target.result });
+      localStorage.setItem('tvChannels', JSON.stringify(channels));
+      showChannelVideos();
+      alert('✅ Uploaded to library!');
+    };
+    reader.readAsDataURL(file);
+  }
+};
+showChannelVideos();
+
+// ==================== DEV CONSOLE ====================
+document.getElementById('runCodeBtn').onclick = () => {
+  try {
+    eval(document.getElementById('codeArea').value);
+    document.getElementById('devOutput').innerHTML = '✅ Code executed successfully';
+  } catch(e) {
+    document.getElementById('devOutput').innerHTML = 'Error: '+e.message;
+  }
+};
+
+// ==================== EARN TICKETS FUNCTION ====================
+// This function can be called to give users tickets and generate a code
+function earnTickets(userId, amount) {
+  const user = users[userId];
+  if (!user) return;
+  
+  const code = generateTicketCode(amount);
+  user.zpoints = (user.zpoints || 0) + amount;
+  saveUsers();
+  updateUI();
+  
+  alert(`🎫 You earned ${amount} ZOS Tickets!\nCode: ${code}\nRedeem this code in the store!`);
+  return code;
+}
+
+// ==================== INIT ====================
+currentUser = getCurrentUser();
+updateUI();
+renderShows('all');
+renderFeaturedShows();
+setInterval(updateUI, 1000);
+
+// Switch to home
+switchPanel('home');
+
+console.log('🎉 ZOS StreamOS 4.3 loaded!');
+console.log('👤 Current user:', currentUser?.name);
+console.log('🎫 ZOS Tickets:', currentUser?.zpoints);
+console.log('📺 Shows loaded:', SHOWS_CONFIG.length);
+console.log('🏆 Sports teams available: LA Galaxy, LA Lakers, NY Yankees, Dallas Cowboys, Maple Leafs, Man United');
+</script>
+</body>
+</html>
